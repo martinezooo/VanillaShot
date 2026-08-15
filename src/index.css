@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  font-family: 'Oxanium', 'IBM Plex Sans', sans-serif;
+  line-height: 1.4;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --ink-50: #f6f8ff;
+  --ink-100: #dce2f0;
+  --ink-200: #c0c9dd;
+  --ink-300: #9eabc3;
+  --ink-400: #7f8aa0;
+  --ink-500: #647087;
+  --line-red-soft: rgba(255, 39, 39, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  color: var(--ink-100);
+  background:
+    linear-gradient(rgba(255, 0, 38, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 0, 38, 0.06) 1px, transparent 1px),
+    radial-gradient(circle at 50% 0%, rgba(114, 10, 15, 0.35), transparent 48%),
+    radial-gradient(circle at 80% 70%, rgba(19, 31, 56, 0.34), transparent 52%),
+    #05080f;
+  background-size: 34px 34px, 34px 34px, auto, auto, auto;
+}
+
+html.quick-editor-open,
+body.quick-editor-open {
+  background: transparent;
+  overflow: hidden;
+}
+
+html.quick-editor-open,
+body.quick-editor-open,
+body.quick-editor-open #root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
