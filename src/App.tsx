@@ -330,6 +330,28 @@ const toDataUrl = async (blob: Blob): Promise<string> =>
 const getLocalLangPath = (): string =>
   typeof window !== 'undefined' ? `${window.location.origin}/tessdata` : '/tessdata'
 
+/**
+ * Worker options that keep OCR entirely on this machine.
+ *
+ * tesseract.js defaults `workerPath` and `corePath` to cdn.jsdelivr.net, so
+ * bundling only the language data still left every cold start reaching for the
+ * network - and telling a CDN each time someone redacted a screenshot. The
+ * files are vendored into public/tesseract by scripts/vendor-tesseract.mjs.
+ *
+ * corePath stays a directory so tesseract picks the right build for the CPU's
+ * SIMD support at runtime.
+ */
+const getLocalWorkerOptions = () => {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
+  return {
+    langPath: getLocalLangPath(),
+    workerPath: `${origin}/tesseract/worker.min.js`,
+    corePath: `${origin}/tesseract/`,
+    gzip: true,
+  }
+}
+
 const isDesktopRuntime = (): boolean => {
   if (typeof window === 'undefined') {
     return false
@@ -2744,10 +2766,7 @@ function App() {
     let worker: Awaited<ReturnType<typeof createWorker>> | null = null
 
     try {
-      worker = await createWorker('eng', undefined, {
-        langPath: getLocalLangPath(),
-        gzip: true,
-      })
+      worker = await createWorker('eng', undefined, getLocalWorkerOptions())
       const result = await worker.recognize(selectionCanvas.toDataURL('image/png'))
       const extractedText = result.data.text.trim()
       const resultText = extractedText.length > 0 ? extractedText : 'No text detected in this area.'
@@ -3019,8 +3038,7 @@ function App() {
 
     try {
       const worker = await createWorker('eng', undefined, {
-        langPath: getLocalLangPath(),
-        gzip: true,
+        ...getLocalWorkerOptions(),
         logger: (message: LoggerMessage) => {
           if (typeof message.progress === 'number') {
             setOcrProgress(message.progress)
@@ -3032,7 +3050,10 @@ function App() {
         },
       })
 
-      const result = await worker.recognize(imageSource)
+      // `blocks` has to be requested explicitly: recognize() defaults to
+      // `{ text: true }`, and without this the word boxes below are always
+      // empty - which is what kept sensitive-token detection from ever firing.
+      const result = await worker.recognize(imageSource, {}, { text: true, blocks: true })
       await worker.terminate()
 
       const recognizedWords = collectWordsFromBlocks(result.data.blocks)

@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Vendored at build time by scripts/vendor-tesseract.mjs
+public/tesseract/

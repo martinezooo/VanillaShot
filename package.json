@@ -13,7 +13,10 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "update": "./scripts/update.sh"
+    "update": "./scripts/update.sh",
+    "vendor:tesseract": "node scripts/vendor-tesseract.mjs",
+    "predev": "node scripts/vendor-tesseract.mjs",
+    "prebuild": "node scripts/vendor-tesseract.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",
