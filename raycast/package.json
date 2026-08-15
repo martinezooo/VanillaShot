@@ -1,0 +1,51 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "aye",
+  "title": "AYE",
+  "description": "Capture a redactable region and search your local AYE screen memory.",
+  "icon": "command-icon.png",
+  "author": "hackjitsu",
+  "categories": [
+    "Developer Tools",
+    "Productivity"
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "capture-region",
+      "title": "Capture Region",
+      "subtitle": "AYE",
+      "description": "Start a region capture and open it in the AYE editor.",
+      "mode": "no-view"
+    },
+    {
+      "name": "toggle-memory",
+      "title": "Toggle Screen Memory",
+      "subtitle": "AYE",
+      "description": "Start or stop local background screen recording.",
+      "mode": "no-view"
+    },
+    {
+      "name": "search-memory",
+      "title": "Search Screen Memory",
+      "subtitle": "AYE",
+      "description": "Full-text search across OCR text from recorded frames.",
+      "mode": "view"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.83.1",
+    "@raycast/utils": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.0.10",
+    "typescript": "^5.6.3"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "lint": "ray lint",
+    "fix-lint": "ray lint --fix"
+  }
+}

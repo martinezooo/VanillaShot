@@ -6,7 +6,8 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'src-tauri/target', 'src-tauri/gen']),
+  // The Raycast extension ships its own toolchain (`ray lint`).
+  globalIgnores(['dist', 'src-tauri/target', 'src-tauri/gen', 'raycast']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

@@ -25,13 +25,21 @@ Author: hack-jitsu.com
   - AWS access keys
   - hash-like long hex values
   - high-entropy long tokens
+- QR / barcode scanning (`zxing-wasm`, bundled locally so it works offline):
+  - QR, Micro QR, rMQR, DataMatrix, Aztec, PDF417, Code 128, Code 39, EAN-13, ITF
+  - payloads classified as critical / sensitive / benign, with the reason shown
+  - critical: TOTP/HOTP seeds (`otpauth://`), Wi-Fi credentials (`WIFI:`),
+    URLs with embedded credentials, JWTs, AWS keys, private key material
+  - mask one code or every non-benign one; masks are always blackout, since a
+    blurred symbol can still carry recoverable module contrast
+  - critical payloads stay hidden until revealed, and decoded links are never
+    opened — only copied
 - Annotation tools:
   - blur rectangle
   - blackout rectangle
   - highlight rectangle
   - strike line
   - sign/text notes
-- One-click auto-mask for detected sensitive tokens
 - Export PNG and copy PNG to clipboard
 
 ## Prerequisites (desktop)
@@ -67,6 +75,31 @@ npm run tauri:dev
 ```bash
 npm run tauri:build
 ```
+
+## Raycast
+
+`raycast/` holds a Raycast extension with three commands: Capture Region,
+Toggle Screen Memory, and Search Screen Memory. Actions travel over the `aye://`
+URL scheme (a fixed set of verbs, no payloads, no open port); search reads the
+memory database read-only. See [raycast/README.md](raycast/README.md).
+
+## Deep links
+
+The installed app registers the `aye://` scheme:
+
+| URL | Action |
+| --- | --- |
+| `aye://capture` | Start a region capture |
+| `aye://show` | Reveal the main window |
+| `aye://memory/start` | Start screen memory (no-op if already recording) |
+| `aye://memory/stop` | Stop screen memory (no-op if idle) |
+| `aye://memory/toggle` | Flip screen memory |
+
+```bash
+open "aye://capture"
+```
+
+Unknown actions are logged and ignored.
 
 ## Keyboard shortcuts
 

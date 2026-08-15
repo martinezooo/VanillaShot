@@ -615,6 +615,55 @@ fn open_screen_recording_settings_impl() -> Result<(), CaptureError> {
     Ok(())
 }
 
+/// Handles one `aye://` URL.
+///
+/// Any process on the machine can open a deep link, so the surface is kept to a
+/// closed set of verbs that the tray menu already exposes. Nothing here accepts
+/// a path, a payload, or anything else an untrusted caller could steer.
+#[cfg(desktop)]
+fn handle_deep_link(app_handle: &tauri::AppHandle, raw_url: &str) {
+    let Some(action) = raw_url.trim().to_ascii_lowercase().strip_prefix("aye://").map(
+        |action| action.trim_matches('/').to_string(),
+    ) else {
+        return;
+    };
+
+    match action.as_str() {
+        "capture" => start_background_capture(app_handle.clone()),
+        "show" => show_main_window(app_handle),
+        "memory/start" | "memory/stop" | "memory/toggle" => {
+            let handle = app_handle.clone();
+            let action = action.clone();
+            tauri::async_runtime::spawn(async move {
+                let recording = handle.state::<memory::MemoryState>().is_recording();
+                // start and stop are idempotent; only toggle flips state.
+                let start = match action.as_str() {
+                    "memory/start" => !recording,
+                    "memory/stop" => false,
+                    _ => !recording,
+                };
+                let stop = match action.as_str() {
+                    "memory/start" => false,
+                    "memory/stop" => recording,
+                    _ => recording,
+                };
+
+                if start {
+                    let _ = memory::commands::memory_start(handle.state(), handle.clone()).await;
+                } else if stop {
+                    let _ = memory::commands::memory_stop(handle.state(), handle.clone()).await;
+                }
+
+                #[cfg(target_os = "macos")]
+                refresh_tray_menu(&handle);
+            });
+        }
+        other => {
+            log::warn!("Ignoring unknown deep link action: aye://{other}");
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -627,6 +676,20 @@ pub fn run() {
                         .level(log::LevelFilter::Info)
                         .build(),
                 )?;
+            }
+
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+
+                app.handle().plugin(tauri_plugin_deep_link::init())?;
+
+                let deep_link_handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        handle_deep_link(&deep_link_handle, url.as_str());
+                    }
+                });
             }
 
             #[cfg(desktop)]
