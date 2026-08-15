@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "aye",
-  "title": "AYE",
-  "description": "Capture a redactable region and search your local AYE screen memory.",
+  "name": "vanilla-shoot",
+  "title": "Vanilla Shoot",
+  "description": "Capture a redactable region and search your local Vanilla Shoot screen memory.",
   "icon": "command-icon.png",
   "author": "hackjitsu",
   "categories": [
@@ -14,21 +14,21 @@
     {
       "name": "capture-region",
       "title": "Capture Region",
-      "subtitle": "AYE",
-      "description": "Start a region capture and open it in the AYE editor.",
+      "subtitle": "Vanilla Shoot",
+      "description": "Start a region capture and open it in the Vanilla Shoot editor.",
       "mode": "no-view"
     },
     {
       "name": "toggle-memory",
       "title": "Toggle Screen Memory",
-      "subtitle": "AYE",
+      "subtitle": "Vanilla Shoot",
       "description": "Start or stop local background screen recording.",
       "mode": "no-view"
     },
     {
       "name": "search-memory",
       "title": "Search Screen Memory",
-      "subtitle": "AYE",
+      "subtitle": "Vanilla Shoot",
       "description": "Full-text search across OCR text from recorded frames.",
       "mode": "view"
     }

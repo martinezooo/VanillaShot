@@ -159,7 +159,7 @@ fn open_quick_capture_window(
         QUICK_EDITOR_WINDOW_LABEL,
         WebviewUrl::default(),
     )
-    .title("AYE Quick Editor")
+    .title("Vanilla Shoot Quick Editor")
     .inner_size(frame.width, frame.height)
     .position(frame.x, frame.y)
     .resizable(false)
@@ -245,7 +245,7 @@ fn capture_region_macos() -> Result<String, CaptureError> {
         .unwrap_or_default()
         .as_millis();
     let file_path = std::env::temp_dir().join(format!(
-        "aye-region-{}-{}.png",
+        "vanilla-shoot-region-{}-{}.png",
         std::process::id(),
         epoch_ms
     ));
@@ -312,7 +312,7 @@ fn save_capture_png_impl(
         CaptureError::failed(format!("Failed to create output directory: {error}"))
     })?;
 
-    let output_path = output_dir.join(format!("aye-{}-{}.png", std::process::id(), epoch_millis()));
+    let output_path = output_dir.join(format!("vanilla-shoot-{}-{}.png", std::process::id(), epoch_millis()));
 
     fs::write(&output_path, image_bytes)
         .map_err(|error| CaptureError::failed(format!("Failed to write PNG file: {error}")))?;
@@ -340,7 +340,7 @@ fn persist_capture_note(
         .unwrap_or("capture.png");
 
     let note_body = format!(
-        "AYE note for {image_name}\nImage path: {}\n\n{trimmed_note}\n",
+        "Vanilla Shoot note for {image_name}\nImage path: {}\n\n{trimmed_note}\n",
         image_path.to_string_lossy()
     );
 
@@ -524,7 +524,7 @@ fn build_tray_menu(
     let show_item = tauri::menu::MenuItem::with_id(
         app_handle,
         TRAY_SHOW_MENU_ID,
-        "Show AYE",
+        "Show Vanilla Shoot",
         true,
         Option::<&str>::None,
     )?;
@@ -538,7 +538,7 @@ fn build_tray_menu(
     let quit_item = tauri::menu::MenuItem::with_id(
         app_handle,
         TRAY_QUIT_MENU_ID,
-        "Quit AYE",
+        "Quit Vanilla Shoot",
         true,
         Option::<&str>::None,
     )?;
@@ -572,7 +572,7 @@ fn tray_memory_label(app_handle: &tauri::AppHandle) -> &'static str {
 
 #[cfg(all(desktop, target_os = "macos"))]
 pub(crate) fn refresh_tray_menu(app_handle: &tauri::AppHandle) {
-    if let Some(tray) = app_handle.tray_by_id("aye-menubar") {
+    if let Some(tray) = app_handle.tray_by_id("vanilla-shoot-menubar") {
         if let Ok(menu) = build_tray_menu(app_handle, tray_memory_label(app_handle)) {
             let _ = tray.set_menu(Some(menu));
         }
@@ -600,7 +600,7 @@ fn is_screen_capture_permission_error(stderr: &str) -> bool {
 
 #[cfg(target_os = "macos")]
 fn screen_recording_permission_message() -> &'static str {
-    "AYE needs macOS Screen Recording permission. Open System Settings > Privacy & Security > Screen & System Audio Recording, enable AYE, then restart AYE."
+    "Vanilla Shoot needs macOS Screen Recording permission. Open System Settings > Privacy & Security > Screen & System Audio Recording, enable Vanilla Shoot, then restart Vanilla Shoot."
 }
 
 #[cfg(target_os = "macos")]
@@ -615,14 +615,14 @@ fn open_screen_recording_settings_impl() -> Result<(), CaptureError> {
     Ok(())
 }
 
-/// Handles one `aye://` URL.
+/// Handles one `vanillashoot://` URL.
 ///
 /// Any process on the machine can open a deep link, so the surface is kept to a
 /// closed set of verbs that the tray menu already exposes. Nothing here accepts
 /// a path, a payload, or anything else an untrusted caller could steer.
 #[cfg(desktop)]
 fn handle_deep_link(app_handle: &tauri::AppHandle, raw_url: &str) {
-    let Some(action) = raw_url.trim().to_ascii_lowercase().strip_prefix("aye://").map(
+    let Some(action) = raw_url.trim().to_ascii_lowercase().strip_prefix("vanillashoot://").map(
         |action| action.trim_matches('/').to_string(),
     ) else {
         return;
@@ -659,7 +659,7 @@ fn handle_deep_link(app_handle: &tauri::AppHandle, raw_url: &str) {
             });
         }
         other => {
-            log::warn!("Ignoring unknown deep link action: aye://{other}");
+            log::warn!("Ignoring unknown deep link action: vanillashoot://{other}");
         }
     }
 }
@@ -725,7 +725,7 @@ pub fn run() {
             {
                 use tauri::tray::TrayIconBuilder;
 
-                // Keep AYE as a background utility (menu bar style) instead of a regular Dock app.
+                // Keep Vanilla Shoot as a background utility (menu bar style) instead of a regular Dock app.
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                 if let Some(main_window) = app.get_webview_window("main") {
@@ -739,9 +739,9 @@ pub fn run() {
                     .cloned()
                     .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?;
 
-                let _ = TrayIconBuilder::with_id("aye-menubar")
+                let _ = TrayIconBuilder::with_id("vanilla-shoot-menubar")
                     .icon(tray_icon)
-                    .tooltip("AYE")
+                    .tooltip("Vanilla Shoot")
                     .menu(&tray_menu)
                     .show_menu_on_left_click(true)
                     .on_menu_event(move |app_handle, menu_event| {

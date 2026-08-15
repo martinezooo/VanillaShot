@@ -2,7 +2,7 @@ import { Action, ActionPanel, Icon, List } from "@raycast/api";
 import { useSQL } from "@raycast/utils";
 import { useEffect, useMemo, useState } from "react";
 
-import { memoryDatabasePath, runAyeAction } from "./aye";
+import { memoryDatabasePath, runVanillaShootAction } from "./vanillaShoot";
 
 type Frame = {
   id: number;
@@ -132,7 +132,7 @@ const FrameList = ({ databasePath }: { databasePath: string }) => {
         description={
           searchText
             ? "Try a shorter term - matching is prefix-based per word."
-            : "Start screen memory in AYE to build a searchable local history."
+            : "Start screen memory in Vanilla Shoot to build a searchable local history."
         }
       />
       {frames.map((frame) => (
@@ -165,7 +165,7 @@ const FrameList = ({ databasePath }: { databasePath: string }) => {
                 title="Capture Region"
                 icon={Icon.Crop}
                 shortcut={{ modifiers: ["cmd", "shift"], key: "1" }}
-                onAction={() => runAyeAction("capture", "Drag to select a region")}
+                onAction={() => runVanillaShootAction("capture", "Drag to select a region")}
               />
             </ActionPanel>
           }
@@ -183,8 +183,8 @@ export default function Command() {
       <List>
         <List.EmptyView
           icon={Icon.QuestionMark}
-          title="No AYE memory database found"
-          description="Start screen memory in AYE once to create ~/Pictures/AYE Memory/memory.db."
+          title="No Vanilla Shoot memory database found"
+          description="Start screen memory in Vanilla Shoot once to create ~/Pictures/Vanilla Shoot Memory/memory.db."
         />
       </List>
     );

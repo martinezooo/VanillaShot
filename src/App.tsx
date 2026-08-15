@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import {
   ArrowRight,
@@ -10,6 +10,7 @@ import {
   Crosshair,
   Database,
   Eye,
+  EyeOff,
   Film,
   FolderOpen,
   Highlighter,
@@ -42,7 +43,7 @@ import {
   takePendingQuickCapture,
   type DesktopCursorPoint,
 } from './lib/capture'
-import { scanCodesFromImage, type DetectedCode } from './lib/codes'
+import { scanCodesFromImage, type CodeRect, type DetectedCode } from './lib/codes'
 import { isSensitiveToken } from './lib/sensitive'
 import {
   getMemoryFrame,
@@ -912,7 +913,7 @@ function App() {
   const [codeScanRunning, setCodeScanRunning] = useState(false)
   const [codeScanError, setCodeScanError] = useState('')
   const [codeScanProcessedSource, setCodeScanProcessedSource] = useState<string | null>(null)
-  // Critical payloads stay hidden until asked for, so a screenshot of AYE
+  // Critical payloads stay hidden until asked for, so a screenshot of Vanilla Shoot
   // itself does not leak the very seed the user is trying to redact.
   const [revealedCodeIds, setRevealedCodeIds] = useState<string[]>([])
 
@@ -1643,7 +1644,7 @@ function App() {
           return
         }
 
-        await getCurrentWindow().setTitle(`AYE ${APP_VERSION_LABEL}`)
+        await getCurrentWindow().setTitle(`Vanilla Shoot ${APP_VERSION_LABEL}`)
       } catch {
         // Ignore web runtime and restricted desktop environments.
       }
@@ -3114,31 +3115,54 @@ function App() {
     void runCodeScan()
   }, [baseImage, codeScanProcessedSource, codeScanRunning, imageSource, runCodeScan])
 
-  const maskCodes = useCallback((codes: DetectedCode[]) => {
-    if (codes.length === 0) {
+  const sensitiveOcrWords = useMemo(() => ocrWords.filter((word) => word.sensitive), [ocrWords])
+
+  // Always blackout, never blur: blur and pixelate leave structure behind, and
+  // a redaction that merely looks unreadable is not the same as one that is.
+  const maskRects = useCallback((rects: CodeRect[]) => {
+    if (rects.length === 0) {
       return
     }
 
-    // Always blackout, never blur: a blurred symbol can still carry enough
-    // module contrast to be recovered, and an unreadable-looking QR is not the
-    // same as an unreadable one.
-    const masks: Annotation[] = codes.map((code) => ({
+    const masks: Annotation[] = rects.map((rect) => ({
       id: createId(),
       createdAt: Date.now(),
       type: 'blackout' as const,
-      x: code.rect.x,
-      y: code.rect.y,
-      width: code.rect.width,
-      height: code.rect.height,
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
     }))
 
     setAnnotations((prev) => [...prev, ...masks])
     setSelectedAnnotationId(null)
   }, [])
 
+  const maskCodes = useCallback(
+    (codes: DetectedCode[]) => {
+      maskRects(codes.map((code) => code.rect))
+    },
+    [maskRects],
+  )
+
   const handleMaskAllSensitiveCodes = useCallback(() => {
     maskCodes(detectedCodes.filter((code) => code.severity !== 'benign'))
   }, [detectedCodes, maskCodes])
+
+  const handleMaskSensitiveWords = useCallback(() => {
+    // OCR boxes hug the glyphs, so a mask drawn exactly on the box can leave
+    // ascenders and descenders poking out. Pad by a fraction of the line height.
+    const padding = 0.18
+
+    maskRects(
+      sensitiveOcrWords.map((word) => ({
+        x: word.x - word.height * padding,
+        y: word.y - word.height * padding,
+        width: word.width + word.height * padding * 2,
+        height: word.height * (1 + padding * 2),
+      })),
+    )
+  }, [maskRects, sensitiveOcrWords])
 
   const handleCopyCodeText = useCallback(async (code: DetectedCode) => {
     try {
@@ -3209,7 +3233,7 @@ function App() {
 
   const createPngFilename = useCallback(() => {
     const now = new Date().toISOString().replace(/[:.]/g, '-')
-    return `aye-${now}.png`
+    return `vanilla-shoot-${now}.png`
   }, [])
 
   const downloadBlob = useCallback(
@@ -4142,7 +4166,7 @@ function App() {
                 <img className="brand-logo" src="/favicon.png" alt="" aria-hidden="true" />
                 <div>
                   <p className="eyebrow">All You Expect · Screenshot App</p>
-                  <h1>AYE Memory</h1>
+                  <h1>Vanilla Shoot Memory</h1>
                   <p className="subtitle">
                     Record your screen locally, search OCR history, and reopen any remembered frame in the editor.
                   </p>
@@ -4909,6 +4933,17 @@ function App() {
                     </div>
                   )}
                 </div>
+              )}
+              {sensitiveOcrWords.length > 0 && (
+                <button
+                  className="quick-action quick-mask"
+                  onClick={handleMaskSensitiveWords}
+                  type="button"
+                  title="Blackout every token OCR flagged as sensitive"
+                >
+                  <EyeOff size={13} />
+                  Mask {sensitiveOcrWords.length}
+                </button>
               )}
               <button className="quick-action quick-copy" onClick={() => void handleCopy()} type="button" title="Copy PNG">
                 <Copy size={13} />

@@ -73,39 +73,53 @@ impl MemoryState {
 
     /// Path to the compiled screen recorder binary.
     pub fn recorder_binary_path(&self) -> PathBuf {
-        self.data_dir.join("bin").join("aye_recorder")
+        self.data_dir.join("bin").join("vanilla_shoot_recorder")
     }
 }
 
-/// Resolve the base data directory for AYE Memory.
+/// Resolve the base data directory for Vanilla Shoot Memory.
+///
+/// The app has been renamed twice (Vulshot -> AYE -> Vanilla Shoot). Each old
+/// location is migrated in turn so an existing install keeps its history; if a
+/// rename fails, the old directory is used as-is rather than silently starting
+/// an empty store next to the user's recordings.
 fn memory_data_dir() -> PathBuf {
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        let pictures_dir = home.join("Pictures").join("AYE Memory");
-        let previous_pictures_dir = home.join("Pictures").join("Vulshot Memory");
-        let legacy_dir = home
-            .join("Library")
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return std::env::temp_dir().join("vanilla-shoot-memory");
+    };
+
+    let pictures_dir = home.join("Pictures").join("Vanilla Shoot Memory");
+
+    if pictures_dir.exists() {
+        return pictures_dir;
+    }
+
+    // Newest first, so a machine carrying several old directories adopts the
+    // most recent history.
+    let legacy_dirs = [
+        home.join("Pictures").join("AYE Memory"),
+        home.join("Pictures").join("Vulshot Memory"),
+        home.join("Library")
             .join("Application Support")
             .join("com.vulshot")
-            .join("memory");
+            .join("memory"),
+    ];
 
-        if !pictures_dir.exists()
-            && previous_pictures_dir.exists()
-            && fs::rename(&previous_pictures_dir, &pictures_dir).is_err()
-        {
-            return previous_pictures_dir;
+    for legacy_dir in legacy_dirs {
+        if !legacy_dir.exists() {
+            continue;
         }
 
-        if !pictures_dir.exists() && legacy_dir.exists() {
-            if let Some(parent) = pictures_dir.parent() {
-                let _ = fs::create_dir_all(parent);
-            }
+        if let Some(parent) = pictures_dir.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
 
-            if fs::rename(&legacy_dir, &pictures_dir).is_err() {
-                return legacy_dir;
-            }
+        if fs::rename(&legacy_dir, &pictures_dir).is_err() {
+            return legacy_dir;
         }
 
         return pictures_dir;
     }
-    std::env::temp_dir().join("aye-memory")
+
+    pictures_dir
 }

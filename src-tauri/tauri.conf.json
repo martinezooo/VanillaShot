@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "AYE",
+  "productName": "Vanilla Shoot",
   "version": "0.1.22",
-  "identifier": "com.hackjitsu.aye",
+  "identifier": "com.hackjitsu.vanillashoot",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "AYE v0.1.22",
+        "title": "Vanilla Shoot v0.1.22",
         "width": 1440,
         "height": 900,
         "minWidth": 640,
@@ -32,7 +32,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["aye"]
+        "schemes": ["vanillashoot"]
       }
     }
   },

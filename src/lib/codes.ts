@@ -50,8 +50,8 @@ const MASK_PADDING_RATIO = 0.08
 
 let moduleConfigured = false
 
-// zxing-wasm defaults to fetching its WASM binary from the jsDelivr CDN. AYE is
-// local-first and runs offline, so the binary is bundled by Vite instead.
+// zxing-wasm defaults to fetching its WASM binary from the jsDelivr CDN.
+// Vanilla Shoot is local-first and runs offline, so Vite bundles it instead.
 const configureModule = (): void => {
   if (moduleConfigured) {
     return

@@ -1,6 +1,6 @@
-# AYE
+# Vanilla Shoot
 
-AYE (All You Expect) is a local-first screenshot and screen memory app.
+Vanilla Shoot is a local-first screenshot and screen memory app.
 It is inspired by CleanShot-style UX, but focused on OCR-driven redaction.
 
 Author: hack-jitsu.com
@@ -40,6 +40,7 @@ Author: hack-jitsu.com
   - highlight rectangle
   - strike line
   - sign/text notes
+- One-click blackout of every OCR token flagged as sensitive
 - Export PNG and copy PNG to clipboard
 
 ## Prerequisites (desktop)
@@ -79,24 +80,24 @@ npm run tauri:build
 ## Raycast
 
 `raycast/` holds a Raycast extension with three commands: Capture Region,
-Toggle Screen Memory, and Search Screen Memory. Actions travel over the `aye://`
+Toggle Screen Memory, and Search Screen Memory. Actions travel over the `vanillashoot://`
 URL scheme (a fixed set of verbs, no payloads, no open port); search reads the
 memory database read-only. See [raycast/README.md](raycast/README.md).
 
 ## Deep links
 
-The installed app registers the `aye://` scheme:
+The installed app registers the `vanillashoot://` scheme:
 
 | URL | Action |
 | --- | --- |
-| `aye://capture` | Start a region capture |
-| `aye://show` | Reveal the main window |
-| `aye://memory/start` | Start screen memory (no-op if already recording) |
-| `aye://memory/stop` | Stop screen memory (no-op if idle) |
-| `aye://memory/toggle` | Flip screen memory |
+| `vanillashoot://capture` | Start a region capture |
+| `vanillashoot://show` | Reveal the main window |
+| `vanillashoot://memory/start` | Start screen memory (no-op if already recording) |
+| `vanillashoot://memory/stop` | Stop screen memory (no-op if idle) |
+| `vanillashoot://memory/toggle` | Flip screen memory |
 
 ```bash
-open "aye://capture"
+open "vanillashoot://capture"
 ```
 
 Unknown actions are logged and ignored.

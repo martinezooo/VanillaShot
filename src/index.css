@@ -9,13 +9,13 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --ink-50: #f6f8ff;
-  --ink-100: #dce2f0;
-  --ink-200: #c0c9dd;
-  --ink-300: #9eabc3;
-  --ink-400: #7f8aa0;
-  --ink-500: #647087;
-  --line-red-soft: rgba(255, 39, 39, 0.28);
+  --ink-50: #fcfbf9;
+  --ink-100: #eae7e2;
+  --ink-200: #d4cfc9;
+  --ink-300: #b8b1a9;
+  --ink-400: #969089;
+  --ink-500: #7d766f;
+  --line-accent-soft: rgba(239, 184, 55, 0.28);
 }
 
 * {
@@ -34,11 +34,11 @@ body {
   min-width: 320px;
   color: var(--ink-100);
   background:
-    linear-gradient(rgba(255, 0, 38, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 0, 38, 0.06) 1px, transparent 1px),
-    radial-gradient(circle at 50% 0%, rgba(114, 10, 15, 0.35), transparent 48%),
-    radial-gradient(circle at 80% 70%, rgba(19, 31, 56, 0.34), transparent 52%),
-    #05080f;
+    linear-gradient(rgba(236, 171, 19, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(236, 171, 19, 0.06) 1px, transparent 1px),
+    radial-gradient(circle at 50% 0%, rgba(107, 80, 17, 0.35), transparent 48%),
+    radial-gradient(circle at 80% 70%, rgba(45, 38, 30, 0.34), transparent 52%),
+    #0c0a08;
   background-size: 34px 34px, 34px 34px, auto, auto, auto;
 }
 
