@@ -42,6 +42,8 @@ import {
   takePendingQuickCapture,
   type DesktopCursorPoint,
 } from './lib/capture'
+import { scanCodesFromImage, type DetectedCode } from './lib/codes'
+import { isSensitiveToken } from './lib/sensitive'
 import {
   getMemoryFrame,
   openMemoryPathInFinder,
@@ -219,16 +221,6 @@ const TOOL_LABEL: Record<Tool, string> = {
   text: 'Text',
 }
 
-const SENSITIVE_PATTERNS: RegExp[] = [
-  /^(?:\d{1,3}\.){3}\d{1,3}$/, // IPv4
-  /^[A-F0-9:]{4,}$/i, // IPv6-ish chunks
-  /^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$/, // email
-  /^https?:\/\/.+$/i, // URL
-  /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/, // JWT
-  /^(?:AKIA|ASIA)[A-Z0-9]{16}$/, // AWS access key
-  /^[A-Fa-f0-9]{32,}$/, // hashes
-]
-
 const BLUR_STRENGTH = 12
 const DEFAULT_ACCENT_COLOR = '#ff2b2b'
 const MIN_ZOOM = 0.35
@@ -266,6 +258,17 @@ const CROP_ASPECT_OPTIONS: CropAspect[] = ['free', '1:1', '4:3', '16:9']
 const STROKE_WIDTH_OPTIONS = [2, 3, 5, 7] as const
 const SNAP_DISTANCE = 14
 const APP_VERSION_LABEL = `v${__APP_VERSION__}`
+const CODE_SEVERITY_LABEL: Record<DetectedCode['severity'], string> = {
+  critical: 'Critical',
+  sensitive: 'Sensitive',
+  benign: 'Info',
+}
+const CODE_PAYLOAD_PREVIEW_LIMIT = 140
+
+const truncatePayload = (text: string): string =>
+  text.length > CODE_PAYLOAD_PREVIEW_LIMIT
+    ? `${text.slice(0, CODE_PAYLOAD_PREVIEW_LIMIT)}...`
+    : text
 
 const createId = (): string =>
   globalThis.crypto?.randomUUID
@@ -307,24 +310,6 @@ const collectWordsFromBlocks = (blocks: Block[] | null): Word[] => {
   }
 
   return words
-}
-
-const isSensitiveToken = (rawText: string): boolean => {
-  const token = rawText.trim()
-  if (!token) {
-    return false
-  }
-
-  if (SENSITIVE_PATTERNS.some((pattern) => pattern.test(token))) {
-    return true
-  }
-
-  // Catches random-looking API keys that do not match a known prefix.
-  const hasLetters = /[A-Za-z]/.test(token)
-  const hasNumbers = /\d/.test(token)
-  const likelyToken = hasLetters && hasNumbers && token.length >= 24 && /^[A-Za-z0-9._-]+$/.test(token)
-
-  return likelyToken
 }
 
 const toDataUrl = async (blob: Blob): Promise<string> =>
@@ -923,6 +908,13 @@ function App() {
   const [autoOcrEnabled] = useState(true)
   const [autoOcrProcessedSource, setAutoOcrProcessedSource] = useState<string | null>(null)
   const [ocrSelectionResult, setOcrSelectionResult] = useState<OcrSelectionResult | null>(null)
+  const [detectedCodes, setDetectedCodes] = useState<DetectedCode[]>([])
+  const [codeScanRunning, setCodeScanRunning] = useState(false)
+  const [codeScanError, setCodeScanError] = useState('')
+  const [codeScanProcessedSource, setCodeScanProcessedSource] = useState<string | null>(null)
+  // Critical payloads stay hidden until asked for, so a screenshot of AYE
+  // itself does not leak the very seed the user is trying to redact.
+  const [revealedCodeIds, setRevealedCodeIds] = useState<string[]>([])
 
   const [copyStatus, setCopyStatus] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -2437,6 +2429,25 @@ function App() {
     }
   }, [ocrWords])
 
+  const drawCodeOverlay = useCallback((ctx: CanvasRenderingContext2D) => {
+    for (const code of detectedCodes) {
+      const { x, y, width, height } = code.rect
+      const stroke =
+        code.severity === 'critical'
+          ? 'rgba(211, 65, 39, 0.95)'
+          : code.severity === 'sensitive'
+            ? 'rgba(214, 138, 20, 0.95)'
+            : 'rgba(35, 115, 205, 0.8)'
+
+      ctx.save()
+      ctx.strokeStyle = stroke
+      ctx.lineWidth = 3
+      ctx.setLineDash([9, 6])
+      ctx.strokeRect(x, y, width, height)
+      ctx.restore()
+    }
+  }, [detectedCodes])
+
   const renderToContext = useCallback(
     (ctx: CanvasRenderingContext2D, withOverlay: boolean) => {
       if (!baseImage) {
@@ -2469,6 +2480,10 @@ function App() {
       if (withOverlay && showOcrOverlay) {
         drawOcrOverlay(ctx)
       }
+
+      if (withOverlay) {
+        drawCodeOverlay(ctx)
+      }
     },
     [
       annotations,
@@ -2477,6 +2492,7 @@ function App() {
       draftCropRect,
       draftAnnotation,
       drawAnnotation,
+      drawCodeOverlay,
       drawCropOverlay,
       drawOcrOverlay,
       drawSelectionOutline,
@@ -3061,6 +3077,85 @@ function App() {
     setAutoOcrProcessedSource(imageSource)
     void runOcr()
   }, [autoOcrEnabled, autoOcrProcessedSource, baseImage, imageSource, ocrRunning, runOcr])
+
+  const runCodeScan = useCallback(async () => {
+    if (!baseImage) {
+      return
+    }
+
+    setCodeScanRunning(true)
+    setCodeScanError('')
+
+    try {
+      const codes = await scanCodesFromImage(baseImage)
+      setDetectedCodes(codes)
+      setRevealedCodeIds([])
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Barcode scan failed'
+      setDetectedCodes([])
+      setCodeScanError(message)
+    } finally {
+      setCodeScanRunning(false)
+    }
+  }, [baseImage])
+
+  // Runs independently of OCR: the WASM decoder is much faster than Tesseract,
+  // so codes surface while text recognition is still working.
+  useEffect(() => {
+    if (!imageSource || !baseImage || codeScanRunning) {
+      return
+    }
+
+    if (codeScanProcessedSource === imageSource) {
+      return
+    }
+
+    setCodeScanProcessedSource(imageSource)
+    void runCodeScan()
+  }, [baseImage, codeScanProcessedSource, codeScanRunning, imageSource, runCodeScan])
+
+  const maskCodes = useCallback((codes: DetectedCode[]) => {
+    if (codes.length === 0) {
+      return
+    }
+
+    // Always blackout, never blur: a blurred symbol can still carry enough
+    // module contrast to be recovered, and an unreadable-looking QR is not the
+    // same as an unreadable one.
+    const masks: Annotation[] = codes.map((code) => ({
+      id: createId(),
+      createdAt: Date.now(),
+      type: 'blackout' as const,
+      x: code.rect.x,
+      y: code.rect.y,
+      width: code.rect.width,
+      height: code.rect.height,
+    }))
+
+    setAnnotations((prev) => [...prev, ...masks])
+    setSelectedAnnotationId(null)
+  }, [])
+
+  const handleMaskAllSensitiveCodes = useCallback(() => {
+    maskCodes(detectedCodes.filter((code) => code.severity !== 'benign'))
+  }, [detectedCodes, maskCodes])
+
+  const handleCopyCodeText = useCallback(async (code: DetectedCode) => {
+    try {
+      await navigator.clipboard.writeText(code.text)
+      setCopyStatus('Payload copied')
+    } catch {
+      setCopyStatus('Clipboard copy failed')
+    }
+  }, [])
+
+  const handleToggleCodeReveal = useCallback((codeId: string) => {
+    setRevealedCodeIds((prev) =>
+      prev.includes(codeId) ? prev.filter((id) => id !== codeId) : [...prev, codeId],
+    )
+  }, [])
+
+  const sensitiveCodeCount = detectedCodes.filter((code) => code.severity !== 'benign').length
 
   const exportBlob = useCallback(async (): Promise<Blob | null> => {
     if (!baseImage) {
@@ -4753,6 +4848,66 @@ function App() {
                       </button>
                     )}
                   </div>
+                </div>
+              )}
+              {(detectedCodes.length > 0 || codeScanError) && (
+                <div className="quick-inline-panel quick-inline-panel-codes">
+                  <div className="quick-inline-panel-head">
+                    <strong>Codes</strong>
+                    <span>
+                      {codeScanError
+                        ? codeScanError
+                        : `${detectedCodes.length} decoded${
+                            sensitiveCodeCount > 0 ? ` - ${sensitiveCodeCount} worth masking` : ''
+                          }`}
+                    </span>
+                  </div>
+                  <ul className="quick-code-list">
+                    {detectedCodes.map((code) => {
+                      const revealed = code.severity !== 'critical' || revealedCodeIds.includes(code.id)
+
+                      return (
+                        <li key={code.id} className={`quick-code-item severity-${code.severity}`}>
+                          <div className="quick-code-meta">
+                            <span className="quick-code-format">{code.format}</span>
+                            <span className="quick-code-severity">{CODE_SEVERITY_LABEL[code.severity]}</span>
+                            <span className="quick-code-reason">{code.reason}</span>
+                          </div>
+                          <p className="quick-code-payload" title={revealed ? code.text : undefined}>
+                            {revealed ? truncatePayload(code.text) : 'Hidden - contains secret material'}
+                          </p>
+                          <div className="quick-code-actions">
+                            {code.severity === 'critical' && (
+                              <button
+                                className="button ghost mini"
+                                onClick={() => handleToggleCodeReveal(code.id)}
+                                type="button"
+                              >
+                                {revealed ? 'Hide' : 'Reveal'}
+                              </button>
+                            )}
+                            <button
+                              className="button ghost mini"
+                              onClick={() => void handleCopyCodeText(code)}
+                              type="button"
+                            >
+                              Copy payload
+                            </button>
+                            <button className="button ghost mini" onClick={() => maskCodes([code])} type="button">
+                              Mask
+                            </button>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  {sensitiveCodeCount > 0 && (
+                    <div className="quick-inline-panel-actions">
+                      <button className="button ghost mini" onClick={handleMaskAllSensitiveCodes} type="button">
+                        Mask all sensitive ({sensitiveCodeCount})
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               <button className="quick-action quick-copy" onClick={() => void handleCopy()} type="button" title="Copy PNG">
