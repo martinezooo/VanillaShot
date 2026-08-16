@@ -524,7 +524,7 @@ fn build_tray_menu(
     let show_item = tauri::menu::MenuItem::with_id(
         app_handle,
         TRAY_SHOW_MENU_ID,
-        "Show Vanilla Shoot",
+        "Settings",
         true,
         Option::<&str>::None,
     )?;

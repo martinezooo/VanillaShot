@@ -3,12 +3,10 @@ import { flushSync } from 'react-dom'
 import {
   ArrowRight,
   Check,
-  Clock3,
   CircleHelp,
   Copy,
   Crop,
   Crosshair,
-  Database,
   Eye,
   EyeOff,
   Film,
@@ -17,9 +15,7 @@ import {
   Mic,
   MousePointer2,
   Play,
-  RefreshCw,
   ScanText,
-  Search,
   Slash,
   Square,
   SquareDashed,
@@ -50,11 +46,9 @@ import {
   openMemoryPathInFinder,
   getMemoryStatus,
   getMemoryTimeline,
-  searchMemory,
   startMemoryRecording,
   stopMemoryRecording,
   type MemoryFrame,
-  type MemoryFrameWithImage,
   type MemoryStatus,
 } from './lib/memory'
 
@@ -241,7 +235,6 @@ const QUICK_AUTO_ZOOM_TARGET_HEIGHT_RATIO = 0.58
 const QUICK_ACCENT_SWATCHES = ['#ff2b2b', '#ff7a29', '#ffd049', '#17c67b', '#4ea8ff', '#f8fafc'] as const
 const MEMORY_TIMELINE_WINDOW_HOURS = 6
 const MEMORY_TIMELINE_LIMIT = 14
-const MEMORY_SEARCH_LIMIT = 20
 const NOTE_STORAGE_LABEL = 'Saved locally next to the PNG as a TXT note'
 const CROP_ASPECT_RATIOS: Record<Exclude<CropAspect, 'free'>, number> = {
   '1:1': 1,
@@ -405,32 +398,6 @@ const formatMemoryTimestamp = (timestamp: string): string => {
     hour: '2-digit',
     minute: '2-digit',
   }).format(parsed)
-}
-
-const formatMemoryRelativeTime = (timestamp: string): string => {
-  const parsed = new Date(timestamp)
-  if (Number.isNaN(parsed.getTime())) {
-    return timestamp
-  }
-
-  const diffMs = Date.now() - parsed.getTime()
-  const diffMinutes = Math.max(0, Math.round(diffMs / 60000))
-
-  if (diffMinutes < 1) {
-    return 'just now'
-  }
-
-  if (diffMinutes < 60) {
-    return `${diffMinutes}m ago`
-  }
-
-  const diffHours = Math.round(diffMinutes / 60)
-  if (diffHours < 24) {
-    return `${diffHours}h ago`
-  }
-
-  const diffDays = Math.round(diffHours / 24)
-  return `${diffDays}d ago`
 }
 
 const formatElapsedTimer = (totalSeconds: number): string => {
@@ -958,17 +925,10 @@ function App() {
     idleReportDebugState(`Ready: ${NOTE_STORAGE_LABEL}`),
   )
   const [memoryStatus, setMemoryStatus] = useState<MemoryStatus | null>(null)
-  const [memoryStatusLoading, setMemoryStatusLoading] = useState(false)
+  const [, setMemoryStatusLoading] = useState(false)
   const [memoryActionLoading, setMemoryActionLoading] = useState(false)
-  const [memoryTimelineLoading, setMemoryTimelineLoading] = useState(false)
+  const [, setMemoryTimelineLoading] = useState(false)
   const [memoryTimelineFrames, setMemoryTimelineFrames] = useState<MemoryFrame[]>([])
-  const [memorySearchQuery, setMemorySearchQuery] = useState('')
-  const [memorySearchLoading, setMemorySearchLoading] = useState(false)
-  const [memorySearchFrames, setMemorySearchFrames] = useState<MemoryFrame[]>([])
-  const [memorySearchHasRun, setMemorySearchHasRun] = useState(false)
-  const [memorySelectedFrameId, setMemorySelectedFrameId] = useState<number | null>(null)
-  const [memorySelectedFrame, setMemorySelectedFrame] = useState<MemoryFrameWithImage | null>(null)
-  const [memorySelectedFrameLoading, setMemorySelectedFrameLoading] = useState(false)
   const [memoryNotice, setMemoryNotice] = useState<{ tone: 'ok' | 'error'; detail: string } | null>(null)
   const [memoryCountdownValue, setMemoryCountdownValue] = useState<number | null>(null)
   const [memoryRecordingElapsedSecs, setMemoryRecordingElapsedSecs] = useState(0)
@@ -1177,39 +1137,6 @@ function App() {
     fileInputRef.current?.click()
   }, [])
 
-  const loadMemoryFramePreview = useCallback(async (frameId: number) => {
-    if (!isDesktopRuntime()) {
-      return
-    }
-
-    setMemorySelectedFrameId(frameId)
-    setMemorySelectedFrameLoading(true)
-    setMemoryNotice(null)
-
-    try {
-      const frame = await getMemoryFrame(frameId)
-      if (!frame) {
-        setMemorySelectedFrame(null)
-        setMemoryNotice({
-          tone: 'error',
-          detail: 'That frame is no longer available in the local archive.',
-        })
-        return
-      }
-
-      setMemorySelectedFrame(frame)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not load memory frame'
-      setMemorySelectedFrame(null)
-      setMemoryNotice({
-        tone: 'error',
-        detail: message,
-      })
-    } finally {
-      setMemorySelectedFrameLoading(false)
-    }
-  }, [])
-
   const refreshMemoryStatus = useCallback(async () => {
     if (!isDesktopRuntime()) {
       return
@@ -1247,6 +1174,33 @@ function App() {
     }
   }, [memoryStopSummary])
 
+  const handleRevealArchive = useCallback(async () => {
+    const dataDir = memoryStatus?.dataDir
+    if (!isDesktopRuntime() || !dataDir) {
+      return
+    }
+
+    try {
+      await openMemoryPathInFinder(dataDir)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not open Finder'
+      setMemoryNotice({ tone: 'error', detail: message })
+    }
+  }, [memoryStatus?.dataDir])
+
+  const handleOpenRecordingSettings = useCallback(async () => {
+    if (!isDesktopRuntime()) {
+      return
+    }
+
+    try {
+      await invoke('open_screen_recording_settings')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not open System Settings'
+      setMemoryNotice({ tone: 'error', detail: message })
+    }
+  }, [])
+
   const refreshMemoryTimeline = useCallback(async () => {
     if (!isDesktopRuntime()) {
       return
@@ -1258,29 +1212,11 @@ function App() {
     try {
       const frames = await getMemoryTimeline(start, end, MEMORY_TIMELINE_LIMIT)
       setMemoryTimelineFrames(frames)
-
-      if (frames.length === 0 && !memorySearchHasRun) {
-        setMemorySelectedFrame(null)
-        setMemorySelectedFrameId(null)
-      }
-
-      const shouldAutoselect =
-        !memorySearchHasRun &&
-        frames.length > 0 &&
-        (memorySelectedFrameId === null || !frames.some((frame) => frame.id === memorySelectedFrameId))
-
-      if (shouldAutoselect) {
-        void loadMemoryFramePreview(frames[0].id)
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not load recent memory timeline'
 
       if (message.toLowerCase().includes('start recording first')) {
         setMemoryTimelineFrames([])
-        if (!memorySearchHasRun) {
-          setMemorySelectedFrame(null)
-          setMemorySelectedFrameId(null)
-        }
       } else {
         setMemoryNotice({
           tone: 'error',
@@ -1290,7 +1226,7 @@ function App() {
     } finally {
       setMemoryTimelineLoading(false)
     }
-  }, [loadMemoryFramePreview, memorySearchHasRun, memorySelectedFrameId])
+  }, [])
 
   const handleToggleMemoryRecording = useCallback(async () => {
     if (!isDesktopRuntime()) {
@@ -1400,65 +1336,6 @@ function App() {
     quickEditorOpen,
     startMemoryRecordingFromQuickBar,
   ])
-
-  const handleMemorySearch = useCallback(async () => {
-    if (!isDesktopRuntime() || isDedicatedQuickWindow) {
-      return
-    }
-
-    const query = memorySearchQuery.trim()
-    if (!query) {
-      setMemorySearchHasRun(false)
-      setMemorySearchFrames([])
-      await refreshMemoryTimeline()
-      return
-    }
-
-    setMemorySearchLoading(true)
-    setMemorySearchHasRun(true)
-    setMemoryNotice(null)
-
-    try {
-      const frames = await searchMemory(query, MEMORY_SEARCH_LIMIT)
-      setMemorySearchFrames(frames)
-
-      if (frames.length > 0) {
-        void loadMemoryFramePreview(frames[0].id)
-      } else {
-        setMemorySelectedFrame(null)
-        setMemorySelectedFrameId(null)
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not search local memory'
-
-      if (message.toLowerCase().includes('start recording first')) {
-        setMemorySearchFrames([])
-      } else {
-        setMemoryNotice({
-          tone: 'error',
-          detail: message,
-        })
-      }
-    } finally {
-      setMemorySearchLoading(false)
-    }
-  }, [isDedicatedQuickWindow, loadMemoryFramePreview, memorySearchQuery, refreshMemoryTimeline])
-
-  const handleOpenSelectedMemoryFrame = useCallback(async () => {
-    if (!memorySelectedFrame?.imageDataUrl) {
-      return
-    }
-
-    try {
-      setErrorMessage('')
-      await loadImageFromDataUrl(memorySelectedFrame.imageDataUrl, {
-        openQuickEditor: true,
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not open selected memory frame'
-      setErrorMessage(message)
-    }
-  }, [loadImageFromDataUrl, memorySelectedFrame])
 
   useEffect(() => {
     if (!isDesktopRuntime()) {
@@ -1632,15 +1509,9 @@ function App() {
       return
     }
 
+    // The settings window is reached deliberately, from the tray. Capturing a
+    // screenshot no longer drags it on screen behind the quick editor.
     setPendingWindowReveal(false)
-
-    if (!isTauri()) {
-      return
-    }
-
-    void invoke('show_main_capture_window').catch(() => {
-      // non-fatal: quick editor is already loaded
-    })
   }, [baseImage, isDedicatedQuickWindow, pendingWindowReveal, quickEditorOpen])
 
   useEffect(() => {
@@ -4143,29 +4014,6 @@ function App() {
       ? `${memoryStopSummary.frameCount} frames · ${memoryStopSummary.segmentCount} segments saved locally.`
       : 'Screen memory is idle.'
   const cornerMemoryHudActionLabel = memoryStatus?.recording ? 'Stop' : 'Resume'
-  const memorySummaryItems = [
-    {
-      key: 'recording',
-      label: 'State',
-      value: memoryStatus?.recording ? 'Recording now' : 'Idle',
-    },
-    {
-      key: 'frames',
-      label: 'Frames',
-      value: hasMemoryStats ? String(memoryStatus?.stats?.frameCount ?? 0) : '0',
-    },
-    {
-      key: 'segments',
-      label: 'Segments',
-      value: hasMemoryStats ? String(memoryStatus?.stats?.segmentCount ?? 0) : '0',
-    },
-    {
-      key: 'storage',
-      label: 'Storage',
-      value: hasMemoryStats ? formatBlobSize(memoryStatus?.stats?.diskUsageBytes ?? 0) : '0 B',
-    },
-  ]
-
   return (
     <div className={`app-shell ${quickEditorOpen || showCornerMemoryHud ? 'quick-mode' : ''} ${showCornerMemoryHud ? 'memory-hud-mode' : ''}`}>
       <input
@@ -4177,324 +4025,101 @@ function App() {
       />
 
       {!quickEditorOpen && !isDedicatedQuickWindow && !showCornerMemoryHud && (
-        <>
-          <div className="matrix-rain" aria-hidden />
-          <div className="scanlines" aria-hidden />
-
-          <header className="topbar">
-            <div className="brand-block">
-              <div className="brand-identity">
-                <img className="brand-logo" src="/favicon.png" alt="" aria-hidden="true" />
-                <div>
-                  <p className="eyebrow">All You Expect · Screenshot App</p>
-                  <h1>Vanilla Shoot Memory</h1>
-                  <p className="subtitle">
-                    Record your screen locally, search OCR history, and reopen any remembered frame in the editor.
-                  </p>
-                  <p className="author-line">All capture stays on this machine</p>
-                  <p className="version-line">{APP_VERSION_LABEL}</p>
-                </div>
-              </div>
+        <main className="settings-shell">
+          <header className="settings-head">
+            <div>
+              <h1>Vanilla Shoot</h1>
+              <p>All capture stays on this machine</p>
             </div>
-
-            <div className="topbar-actions">
-              <button className="button primary" onClick={() => void handleCaptureScreen()} type="button">
-                <Crosshair size={14} />
-                Capture Region
-              </button>
-              <button className="button ghost" onClick={handleOpenFilePicker} type="button">
-                <FolderOpen size={14} />
-                Open Image
-              </button>
-            </div>
+            <span className="settings-version">{APP_VERSION_LABEL}</span>
           </header>
 
-          <main className="workspace">
-            <section className="launcher-panel">
-              <article className="panel-card">
-                <p className="launcher-copy">
-                  {desktopRuntime
-                    ? 'The backend already records display segments, extracts OCR every 10 seconds, and stores it in a local SQLite archive. This launcher finally exposes that pipeline in the app.'
-                    : 'The memory subsystem is desktop-only. In the browser you can still capture, paste, and edit screenshots.'}
-                </p>
-                <div className="launcher-shortcuts">
-                  <p>`Cmd/Ctrl + Shift + 1` capture region</p>
-                  <p>`Cmd/Ctrl + V` paste image straight into the editor</p>
-                  <p>Tray menu can capture and start or stop memory in the background</p>
-                </div>
-              </article>
+          {launcherFeedback && (
+            <div className={`settings-banner ${launcherFeedback.tone}`} role="status" aria-live="polite">
+              {launcherFeedback.detail}
+            </div>
+          )}
 
-              {launcherFeedback && (
-                <div className={`memory-inline-banner ${launcherFeedback.tone}`} role="status" aria-live="polite">
-                  {launcherFeedback.detail}
-                </div>
-              )}
-
-              <div className="memory-grid">
-                <article className="panel-card memory-card">
-                  <div className="memory-card-head">
-                    <div>
-                      <h2>Capture Engine</h2>
-                      <p>
-                        {memoryStatus?.recording
-                          ? 'ScreenCaptureKit is collecting segments and OCR frames locally.'
-                          : 'Memory recorder is idle until you start it.'}
-                      </p>
-                    </div>
-                    <span className={`memory-status-pill ${memoryStatus?.recording ? 'recording' : 'idle'}`}>
-                      {memoryStatus?.recording ? 'Live' : 'Idle'}
-                    </span>
-                  </div>
-
-                  <div className="memory-stats-grid">
-                    {memorySummaryItems.map((item) => (
-                      <div className="memory-stat-card" key={item.key}>
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="memory-meta-list">
-                    <div>
-                      <span>Frame interval</span>
-                      <strong>{memoryStatus?.frameIntervalSecs ?? 10}s</strong>
-                    </div>
-                    <div>
-                      <span>Segment size</span>
-                      <strong>{memoryStatus?.segmentDurationSecs ?? 300}s</strong>
-                    </div>
-                    <div>
-                      <span>Retention</span>
-                      <strong>{memoryStatus?.retentionDays ?? 30} days</strong>
-                    </div>
-                    <div>
-                      <span>Newest frame</span>
-                      <strong>{memoryStatus?.stats?.newestFrame ? formatMemoryTimestamp(memoryStatus.stats.newestFrame) : 'No frames yet'}</strong>
-                    </div>
-                  </div>
-
-                  <div className="launcher-actions">
-                    <button
-                      className="button primary"
-                      onClick={() => void handleToggleMemoryRecording()}
-                      type="button"
-                      disabled={!desktopRuntime || memoryActionLoading}
-                    >
-                      {memoryStatus?.recording ? <Square size={13} /> : <Play size={13} />}
-                      {memoryActionLoading ? 'Working...' : memoryStatus?.recording ? 'Stop Memory' : 'Start Memory'}
-                    </button>
-                    <button
-                      className="button ghost"
-                      onClick={() => {
-                        void refreshMemoryStatus()
-                        void refreshMemoryTimeline()
-                      }}
-                      type="button"
-                      disabled={!desktopRuntime || memoryStatusLoading || memoryTimelineLoading}
-                    >
-                      <RefreshCw size={13} />
-                      Refresh
-                    </button>
-                  </div>
-
-                  <div className="memory-footnote">
-                    <Database size={13} />
-                    <span>{memoryStatus?.dataDir ?? 'Local archive path will appear here after the first refresh.'}</span>
-                  </div>
-                </article>
-
-                <article className="panel-card memory-card">
-                  <div className="memory-card-head">
-                    <div>
-                      <h2>Search OCR History</h2>
-                      <p>Natural language is next; this MVP exposes the local OCR index that already exists today.</p>
-                    </div>
-                  </div>
-
-                  <form
-                    className="memory-search-form"
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      void handleMemorySearch()
-                    }}
-                  >
-                    <label className="memory-search-field">
-                      <Search size={15} />
-                      <input
-                        type="text"
-                        value={memorySearchQuery}
-                        onChange={(event) => setMemorySearchQuery(event.target.value)}
-                        placeholder="Search OCR text, app names, URLs, tickets..."
-                        disabled={!desktopRuntime}
-                      />
-                    </label>
-                    <div className="launcher-actions">
-                      <button className="button primary" type="submit" disabled={!desktopRuntime || memorySearchLoading}>
-                        {memorySearchLoading ? 'Searching...' : 'Search'}
-                      </button>
-                      <button
-                        className="button ghost"
-                        type="button"
-                        onClick={() => {
-                          setMemorySearchQuery('')
-                          setMemorySearchHasRun(false)
-                          setMemorySearchFrames([])
-                          setMemoryNotice(null)
-                          void refreshMemoryTimeline()
-                        }}
-                        disabled={!desktopRuntime || (memorySearchLoading && memorySearchQuery.length === 0)}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </form>
-
-                  <div className="memory-result-list">
-                    {memorySearchHasRun && memorySearchFrames.length === 0 && !memorySearchLoading && (
-                      <div className="memory-empty-state">
-                        No OCR hits for <strong>{memorySearchQuery.trim()}</strong>.
-                      </div>
-                    )}
-
-                    {!memorySearchHasRun && (
-                      <div className="memory-empty-state">
-                        Start typing above, or use the recent timeline card to inspect the latest remembered frames.
-                      </div>
-                    )}
-
-                    {memorySearchFrames.map((frame) => (
-                      <button
-                        className={`memory-result-row ${memorySelectedFrameId === frame.id ? 'active' : ''}`}
-                        key={`memory-search-${frame.id}`}
-                        onClick={() => void loadMemoryFramePreview(frame.id)}
-                        type="button"
-                      >
-                        <div className="memory-result-meta">
-                          <span>{formatMemoryTimestamp(frame.timestamp)}</span>
-                          <span>{formatMemoryRelativeTime(frame.timestamp)}</span>
-                        </div>
-                        <strong>{summarizeMemoryText(frame.ocrText, 84)}</strong>
-                        <p>{summarizeMemoryText(frame.ocrText, 168)}</p>
-                      </button>
-                    ))}
-                  </div>
-                </article>
-
-                <article className="panel-card memory-card">
-                  <div className="memory-card-head">
-                    <div>
-                      <h2>Recent Timeline</h2>
-                      <p>Latest OCR frames from roughly the last {MEMORY_TIMELINE_WINDOW_HOURS} hours.</p>
-                    </div>
-                    <button
-                      className="button ghost mini"
-                      onClick={() => void refreshMemoryTimeline()}
-                      type="button"
-                      disabled={!desktopRuntime || memoryTimelineLoading}
-                    >
-                      <Clock3 size={13} />
-                      {memoryTimelineLoading ? 'Loading...' : 'Refresh'}
-                    </button>
-                  </div>
-
-                  <div className="memory-result-list">
-                    {memoryTimelineFrames.length === 0 && !memoryTimelineLoading && (
-                      <div className="memory-empty-state">
-                        {desktopRuntime
-                          ? 'No frames in the recent window yet. Start recording and give the OCR loop a moment to populate results.'
-                          : 'Recent timeline is available in the desktop app once the local recorder is running.'}
-                      </div>
-                    )}
-
-                    {memoryTimelineFrames.map((frame) => (
-                      <button
-                        className={`memory-result-row ${memorySelectedFrameId === frame.id ? 'active' : ''}`}
-                        key={`memory-timeline-${frame.id}`}
-                        onClick={() => void loadMemoryFramePreview(frame.id)}
-                        type="button"
-                      >
-                        <div className="memory-result-meta">
-                          <span>{formatMemoryTimestamp(frame.timestamp)}</span>
-                          <span>{formatMemoryRelativeTime(frame.timestamp)}</span>
-                        </div>
-                        <strong>{summarizeMemoryText(frame.ocrText, 84)}</strong>
-                        <p>{summarizeMemoryText(frame.ocrText, 150)}</p>
-                      </button>
-                    ))}
-                  </div>
-                </article>
-
-                <article className="panel-card memory-card memory-preview-card">
-                  <div className="memory-card-head">
-                    <div>
-                      <h2>Frame Preview</h2>
-                      <p>Inspect a remembered frame and jump back into the annotation editor.</p>
-                    </div>
-                  </div>
-
-                  {memorySelectedFrameLoading && <div className="memory-empty-state">Loading frame preview…</div>}
-
-                  {!memorySelectedFrameLoading && !memorySelectedFrame && (
-                    <div className="memory-empty-state">Select a search hit or recent frame to preview it here.</div>
-                  )}
-
-                  {!memorySelectedFrameLoading && memorySelectedFrame && (
-                    <div className="memory-preview-shell">
-                      {memorySelectedFrame.imageDataUrl ? (
-                        <img className="memory-preview-image" src={memorySelectedFrame.imageDataUrl} alt="Selected memory frame" />
-                      ) : (
-                        <div className="memory-preview-missing">Image file is no longer available on disk.</div>
-                      )}
-
-                      <div className="memory-preview-meta">
-                        <div>
-                          <span>Captured</span>
-                          <strong>{formatMemoryTimestamp(memorySelectedFrame.timestamp)}</strong>
-                        </div>
-                        <div>
-                          <span>Relative</span>
-                          <strong>{formatMemoryRelativeTime(memorySelectedFrame.timestamp)}</strong>
-                        </div>
-                        <div>
-                          <span>Offset</span>
-                          <strong>{memorySelectedFrame.offsetSecs.toFixed(1)}s</strong>
-                        </div>
-                        <div>
-                          <span>Segment</span>
-                          <strong>#{memorySelectedFrame.segmentId}</strong>
-                        </div>
-                      </div>
-
-                      <pre className="memory-preview-text">{memorySelectedFrame.ocrText || 'No OCR text extracted for this frame.'}</pre>
-
-                      <div className="launcher-actions">
-                        <button
-                          className="button primary"
-                          onClick={() => void handleOpenSelectedMemoryFrame()}
-                          type="button"
-                          disabled={!memorySelectedFrame.imageDataUrl}
-                        >
-                          Open Frame In Editor
-                        </button>
-                        <button
-                          className="button ghost"
-                          onClick={() => {
-                            void loadMemoryFramePreview(memorySelectedFrame.id)
-                          }}
-                          type="button"
-                        >
-                          <RefreshCw size={13} />
-                          Reload Frame
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </article>
+          <section className="settings-group">
+            <div className="settings-row">
+              <div className="settings-label">
+                <strong>Screen memory</strong>
+                <span>
+                  {!desktopRuntime
+                    ? 'Desktop only'
+                    : memoryStatus?.recording
+                      ? 'Recording to a local archive'
+                      : 'Idle'}
+                </span>
               </div>
-            </section>
-          </main>
-        </>
+              <button
+                className={`settings-toggle ${memoryStatus?.recording ? 'on' : ''}`}
+                onClick={() => void handleToggleMemoryRecording()}
+                type="button"
+                disabled={!desktopRuntime || memoryActionLoading}
+              >
+                {memoryStatus?.recording ? <Square size={12} /> : <Play size={12} />}
+                {memoryActionLoading ? 'Working' : memoryStatus?.recording ? 'Stop' : 'Start'}
+              </button>
+            </div>
+
+            <div className="settings-row static">
+              <span>Frame interval</span>
+              <strong>{memoryStatus?.frameIntervalSecs ?? 10}s</strong>
+            </div>
+            <div className="settings-row static">
+              <span>Retention</span>
+              <strong>{memoryStatus?.retentionDays ?? 30} days</strong>
+            </div>
+            <div className="settings-row static">
+              <span>Stored</span>
+              <strong>
+                {hasMemoryStats
+                  ? `${memoryStatus?.stats?.frameCount ?? 0} frames · ${formatBlobSize(memoryStatus?.stats?.diskUsageBytes ?? 0)}`
+                  : 'Nothing yet'}
+              </strong>
+            </div>
+          </section>
+
+          <section className="settings-group">
+            <div className="settings-row">
+              <div className="settings-label">
+                <strong>Screen Recording permission</strong>
+                <span>Required for region capture and screen memory</span>
+              </div>
+              <button className="settings-action" onClick={() => void handleOpenRecordingSettings()} type="button">
+                Open
+              </button>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-label">
+                <strong>Local archive</strong>
+                <span className="settings-path">{memoryStatus?.dataDir ?? 'Appears after the first run'}</span>
+              </div>
+              <button
+                className="settings-action"
+                onClick={() => void handleRevealArchive()}
+                type="button"
+                disabled={!memoryStatus?.dataDir}
+              >
+                Reveal
+              </button>
+            </div>
+          </section>
+
+          <footer className="settings-foot">
+            <button className="settings-action" onClick={() => void handleCaptureScreen()} type="button">
+              <Crosshair size={12} />
+              Capture region
+            </button>
+            <button className="settings-action" onClick={handleOpenFilePicker} type="button">
+              <FolderOpen size={12} />
+              Open image
+            </button>
+            <span className="settings-hint">Cmd/Ctrl+Shift+1 anywhere</span>
+          </footer>
+        </main>
       )}
 
       {quickEditorOpen && (

@@ -33,13 +33,7 @@ body {
   margin: 0;
   min-width: 320px;
   color: var(--ink-100);
-  background:
-    linear-gradient(rgba(236, 171, 19, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(236, 171, 19, 0.06) 1px, transparent 1px),
-    radial-gradient(circle at 50% 0%, rgba(107, 80, 17, 0.35), transparent 48%),
-    radial-gradient(circle at 80% 70%, rgba(45, 38, 30, 0.34), transparent 52%),
-    #0c0a08;
-  background-size: 34px 34px, 34px 34px, auto, auto, auto;
+  background: #0c0a08;
 }
 
 html.quick-editor-open,
