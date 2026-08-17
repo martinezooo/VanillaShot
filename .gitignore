@@ -25,3 +25,10 @@ dist-ssr
 
 # Vendored at build time by scripts/vendor-tesseract.mjs
 public/tesseract/
+
+# `tauri icon` regenerates icon sets for every platform. This app targets
+# macOS only, and tauri.conf.json references just the sizes kept in git.
+src-tauri/icons/android/
+src-tauri/icons/ios/
+src-tauri/icons/Square*Logo.png
+src-tauri/icons/StoreLogo.png
