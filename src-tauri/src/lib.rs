@@ -126,14 +126,19 @@ fn open_screen_recording_settings() -> Result<(), CaptureError> {
 /// window can show the real state instead of only offering a button that may
 /// not be needed.
 #[cfg(target_os = "macos")]
-#[tauri::command]
-fn screen_recording_access_granted() -> bool {
+fn screen_recording_access_granted_impl() -> bool {
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
         fn CGPreflightScreenCaptureAccess() -> bool;
     }
 
     unsafe { CGPreflightScreenCaptureAccess() }
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn screen_recording_access_granted() -> bool {
+    screen_recording_access_granted_impl()
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -291,6 +296,13 @@ fn capture_region_with_window<R: tauri::Runtime>(
 
 #[cfg(target_os = "macos")]
 fn capture_region_macos() -> Result<String, CaptureError> {
+    // Ask before launching screencapture. Without Screen Recording it exits 1
+    // with no stderr, which is indistinguishable from the user pressing Escape,
+    // so the capture would fail silently and look like nothing happened.
+    if !screen_recording_access_granted_impl() {
+        return Err(CaptureError::failed(screen_recording_permission_message()));
+    }
+
     let epoch_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
