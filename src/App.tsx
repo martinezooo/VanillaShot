@@ -1207,9 +1207,9 @@ function App() {
     }
   }, [])
 
-  const handleOpenProjectPage = useCallback(async () => {
+  const handleOpenProjectPage = useCallback(async (section?: 'releases') => {
     try {
-      await invoke('open_project_page')
+      await invoke('open_project_page', { section: section ?? null })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not open the project page'
       setMemoryNotice({ tone: 'error', detail: message })
@@ -4192,12 +4192,29 @@ function App() {
               <span className="settings-row-value">hack-jitsu.com</span>
             </div>
             <div className="settings-row">
+              <span className="settings-row-label">Updates</span>
+              <span className="settings-row-trailing">
+                <span className="settings-row-value">{APP_VERSION_LABEL} installed</span>
+                <button
+                  className="settings-button"
+                  onClick={() => void handleOpenProjectPage('releases')}
+                  type="button"
+                >
+                  Check on GitHub
+                </button>
+              </span>
+            </div>
+            <div className="settings-row">
               <span className="settings-row-label">Source</span>
               <button className="settings-button" onClick={() => void handleOpenProjectPage()} type="button">
                 GitHub
               </button>
             </div>
           </section>
+          <p className="settings-footnote">
+            The repository is private, so the releases page opens in your browser where you are
+            already signed in. In-app updates arrive once releases are public.
+          </p>
           <p className="settings-footnote">Capture, OCR and screen memory all run locally. Nothing is uploaded.</p>
         </main>
       )}

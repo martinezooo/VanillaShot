@@ -5,8 +5,10 @@
   The skill text predates several renames (Vulshot -> AYE -> Vanilla Shoot -> VanillaShot). Where it says `Vulshot.app`, read `/Applications/VanillaShot.app`, and re-sign with the current identifier:
 
   ```bash
-  codesign --force --deep --sign - --identifier com.hackjitsu.vanillashot "/Applications/VanillaShot.app"
+  npm run install:local
   ```
+
+  Use that script rather than signing by hand. It signs with a certificate from the keychain instead of ad-hoc, which is what keeps the Screen Recording grant alive: an ad-hoc signature carries no certificate, so the designated requirement degrades to the binary's cdhash and every rebuild reads as a different app. Override the certificate with `VANILLASHOT_SIGN_IDENTITY`.
 
   Signing with the skill's stale `com.vulshot` identifier would make macOS treat the app as a different one and reset its Screen Recording grant.
 

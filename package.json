@@ -16,7 +16,8 @@
     "update": "./scripts/update.sh",
     "vendor:tesseract": "node scripts/vendor-tesseract.mjs",
     "predev": "node scripts/vendor-tesseract.mjs",
-    "prebuild": "node scripts/vendor-tesseract.mjs"
+    "prebuild": "node scripts/vendor-tesseract.mjs",
+    "install:local": "bash scripts/install-local.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",
