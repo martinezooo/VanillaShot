@@ -5,7 +5,7 @@ use std::process::Command;
 const OCR_SWIFT_SOURCE: &str = include_str!("../../scripts/ocr_vision.swift");
 
 /// The embedded Swift source for the ScreenCaptureKit video recorder.
-const RECORDER_SWIFT_SOURCE: &str = include_str!("../../scripts/vanilla_shoot_recorder.swift");
+const RECORDER_SWIFT_SOURCE: &str = include_str!("../../scripts/vanilla_shot_recorder.swift");
 
 /// Ensure the compiled OCR binary exists, compiling from source if needed.
 /// Returns the absolute path to the binary.

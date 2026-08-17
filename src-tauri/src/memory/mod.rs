@@ -73,22 +73,22 @@ impl MemoryState {
 
     /// Path to the compiled screen recorder binary.
     pub fn recorder_binary_path(&self) -> PathBuf {
-        self.data_dir.join("bin").join("vanilla_shoot_recorder")
+        self.data_dir.join("bin").join("vanilla_shot_recorder")
     }
 }
 
-/// Resolve the base data directory for Vanilla Shoot Memory.
+/// Resolve the base data directory for VanillaShot Memory.
 ///
-/// The app has been renamed twice (Vulshot -> AYE -> Vanilla Shoot). Each old
-/// location is migrated in turn so an existing install keeps its history; if a
-/// rename fails, the old directory is used as-is rather than silently starting
-/// an empty store next to the user's recordings.
+/// The app has been renamed several times (Vulshot -> AYE -> Vanilla Shoot ->
+/// VanillaShot). Each old location is migrated in turn so an existing install
+/// keeps its history; if a rename fails, the old directory is used as-is rather
+/// than silently starting an empty store next to the user's recordings.
 fn memory_data_dir() -> PathBuf {
     let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
-        return std::env::temp_dir().join("vanilla-shoot-memory");
+        return std::env::temp_dir().join("vanilla-shot-memory");
     };
 
-    let pictures_dir = home.join("Pictures").join("Vanilla Shoot Memory");
+    let pictures_dir = home.join("Pictures").join("VanillaShot Memory");
 
     if pictures_dir.exists() {
         return pictures_dir;
@@ -97,6 +97,7 @@ fn memory_data_dir() -> PathBuf {
     // Newest first, so a machine carrying several old directories adopts the
     // most recent history.
     let legacy_dirs = [
+        home.join("Pictures").join("Vanilla Shoot Memory"),
         home.join("Pictures").join("AYE Memory"),
         home.join("Pictures").join("Vulshot Memory"),
         home.join("Library")

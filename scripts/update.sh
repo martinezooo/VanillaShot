@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
-APP_NAME="Vanilla Shoot"
+APP_NAME="VanillaShot"
 APP_PATH="/Applications/${APP_NAME}.app"
 BUNDLE_PATH="src-tauri/target/release/bundle/macos/${APP_NAME}.app"
 # Must match the identifier the installed app already carries. Signing with a
 # different one makes macOS treat this as a new app and resets its Screen
 # Recording grant.
-BUNDLE_ID="com.hackjitsu.vanillashoot"
+BUNDLE_ID="com.hackjitsu.vanillashot"
 
 echo "[ ${APP_NAME} Updater ]"
 
@@ -32,7 +32,7 @@ echo "Building Tauri app..."
 npm run tauri build
 
 echo "Killing previous instances..."
-killall "vanilla-shoot" 2>/dev/null || true
+killall "vanilla-shot" 2>/dev/null || true
 
 echo "Installing to /Applications..."
 rm -rf "$APP_PATH"

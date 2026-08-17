@@ -1,8 +1,8 @@
 import { closeMainWindow } from "@raycast/api";
 
-import { runVanillaShootAction } from "./vanillaShoot";
+import { runVanillaShotAction } from "./vanillaShot";
 
 export default async function Command() {
   await closeMainWindow();
-  await runVanillaShootAction("memory/toggle", "Toggled Vanilla Shoot screen memory");
+  await runVanillaShotAction("memory/toggle", "Toggled VanillaShot screen memory");
 }

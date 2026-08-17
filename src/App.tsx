@@ -902,7 +902,7 @@ function App() {
   const [codeScanRunning, setCodeScanRunning] = useState(false)
   const [codeScanError, setCodeScanError] = useState('')
   const [codeScanProcessedSource, setCodeScanProcessedSource] = useState<string | null>(null)
-  // Critical payloads stay hidden until asked for, so a screenshot of Vanilla Shoot
+  // Critical payloads stay hidden until asked for, so a screenshot of VanillaShot
   // itself does not leak the very seed the user is trying to redact.
   const [revealedCodeIds, setRevealedCodeIds] = useState<string[]>([])
 
@@ -929,6 +929,8 @@ function App() {
   const [memoryActionLoading, setMemoryActionLoading] = useState(false)
   const [, setMemoryTimelineLoading] = useState(false)
   const [memoryTimelineFrames, setMemoryTimelineFrames] = useState<MemoryFrame[]>([])
+  const [screenRecordingGranted, setScreenRecordingGranted] = useState<boolean | null>(null)
+  const [captureDir, setCaptureDir] = useState<string | null>(null)
   const [memoryNotice, setMemoryNotice] = useState<{ tone: 'ok' | 'error'; detail: string } | null>(null)
   const [memoryCountdownValue, setMemoryCountdownValue] = useState<number | null>(null)
   const [memoryRecordingElapsedSecs, setMemoryRecordingElapsedSecs] = useState(0)
@@ -1174,19 +1176,45 @@ function App() {
     }
   }, [memoryStopSummary])
 
-  const handleRevealArchive = useCallback(async () => {
-    const dataDir = memoryStatus?.dataDir
-    if (!isDesktopRuntime() || !dataDir) {
+  const refreshEnvironmentInfo = useCallback(async () => {
+    if (!isDesktopRuntime()) {
       return
     }
 
     try {
-      await openMemoryPathInFinder(dataDir)
+      const [granted, dir] = await Promise.all([
+        invoke<boolean>('screen_recording_access_granted'),
+        invoke<string>('capture_output_dir'),
+      ])
+      setScreenRecordingGranted(granted)
+      setCaptureDir(dir)
+    } catch {
+      // Leaving the state null renders the status as unknown rather than lying.
+      setScreenRecordingGranted(null)
+    }
+  }, [])
+
+  const handleRevealPath = useCallback(async (path: string) => {
+    if (!isDesktopRuntime() || !path) {
+      return
+    }
+
+    try {
+      await openMemoryPathInFinder(path)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not open Finder'
       setMemoryNotice({ tone: 'error', detail: message })
     }
-  }, [memoryStatus?.dataDir])
+  }, [])
+
+  const handleOpenProjectPage = useCallback(async () => {
+    try {
+      await invoke('open_project_page')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not open the project page'
+      setMemoryNotice({ tone: 'error', detail: message })
+    }
+  }, [])
 
   const handleOpenRecordingSettings = useCallback(async () => {
     if (!isDesktopRuntime()) {
@@ -1537,7 +1565,7 @@ function App() {
           return
         }
 
-        await getCurrentWindow().setTitle('Vanilla Shoot Settings')
+        await getCurrentWindow().setTitle('VanillaShot Settings')
       } catch {
         // Ignore web runtime and restricted desktop environments.
       }
@@ -1557,7 +1585,14 @@ function App() {
 
     void refreshMemoryStatus()
     void refreshMemoryTimeline()
-  }, [isDedicatedQuickWindow, quickEditorOpen, refreshMemoryStatus, refreshMemoryTimeline])
+    void refreshEnvironmentInfo()
+
+    // Granting Screen Recording happens in System Settings, so the answer can
+    // change while this window sits in the background. Re-ask on focus.
+    const onFocus = () => void refreshEnvironmentInfo()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [isDedicatedQuickWindow, quickEditorOpen, refreshEnvironmentInfo, refreshMemoryStatus, refreshMemoryTimeline])
 
   useEffect(() => {
     if (isDedicatedQuickWindow || quickEditorOpen || !isDesktopRuntime()) {
@@ -3125,7 +3160,7 @@ function App() {
 
   const createPngFilename = useCallback(() => {
     const now = new Date().toISOString().replace(/[:.]/g, '-')
-    return `vanilla-shoot-${now}.png`
+    return `vanilla-shot-${now}.png`
   }, [])
 
   const downloadBlob = useCallback(
@@ -3982,6 +4017,14 @@ function App() {
     { key: 'api', label: 'Save Target', icon: <FolderOpen size={14} />, state: reportApiState },
   ]
   const desktopRuntime = isDesktopRuntime()
+
+  const screenRecordingStatus = !desktopRuntime
+    ? { tone: 'unknown' as const, label: 'Desktop only' }
+    : screenRecordingGranted === null
+      ? { tone: 'unknown' as const, label: 'Unknown' }
+      : screenRecordingGranted
+        ? { tone: 'ok' as const, label: 'Granted' }
+        : { tone: 'bad' as const, label: 'Not granted' }
   const launcherFeedback = memoryNotice ?? (errorMessage ? { tone: 'error' as const, detail: errorMessage } : null)
   const hasMemoryStats = Boolean(memoryStatus?.stats)
   const quickMemoryActionLabel = memoryStatus?.recording
@@ -4032,6 +4075,27 @@ function App() {
             </div>
           )}
 
+          <h2 className="settings-section-title">Permissions</h2>
+          <section className="settings-group">
+            <div className="settings-row">
+              <span className="settings-row-label">Screen Recording</span>
+              <span className="settings-row-trailing">
+                <span className={`settings-status ${screenRecordingStatus.tone}`}>
+                  <span className="settings-status-dot" />
+                  {screenRecordingStatus.label}
+                </span>
+                <button className="settings-button" onClick={() => void handleOpenRecordingSettings()} type="button">
+                  Open
+                </button>
+              </span>
+            </div>
+          </section>
+          <p className="settings-footnote">
+            {screenRecordingGranted === false
+              ? 'Region capture and screen memory stay unavailable until this is granted. Restart VanillaShot after granting.'
+              : 'Needed for region capture and screen memory. Checked without prompting.'}
+          </p>
+
           <h2 className="settings-section-title">Screen Memory</h2>
           <section className="settings-group">
             <div className="settings-row">
@@ -4065,33 +4129,38 @@ function App() {
               </span>
             </div>
           </section>
-          <p className="settings-footnote">
-            {desktopRuntime
-              ? 'Frames and OCR text are written to a local archive. Nothing leaves this Mac.'
-              : 'Screen memory is available in the desktop app only.'}
-          </p>
 
-          <h2 className="settings-section-title">Permissions &amp; Files</h2>
+          <h2 className="settings-section-title">Locations</h2>
           <section className="settings-group">
-            <div className="settings-row">
-              <span className="settings-row-label">Screen Recording access</span>
-              <button className="settings-button" onClick={() => void handleOpenRecordingSettings()} type="button">
-                Open System Settings
-              </button>
-            </div>
-            <div className="settings-row">
-              <span className="settings-row-label">Local archive</span>
+            <div className="settings-row settings-row-stacked">
+              <span className="settings-row-label">
+                Screenshots
+                <span className="settings-row-path">{captureDir ?? 'Available in the desktop app'}</span>
+              </span>
               <button
                 className="settings-button"
-                onClick={() => void handleRevealArchive()}
+                onClick={() => void handleRevealPath(captureDir ?? '')}
+                type="button"
+                disabled={!captureDir}
+              >
+                Show
+              </button>
+            </div>
+            <div className="settings-row settings-row-stacked">
+              <span className="settings-row-label">
+                Memory archive
+                <span className="settings-row-path">{memoryStatus?.dataDir ?? 'Created on first recording'}</span>
+              </span>
+              <button
+                className="settings-button"
+                onClick={() => void handleRevealPath(memoryStatus?.dataDir ?? '')}
                 type="button"
                 disabled={!memoryStatus?.dataDir}
               >
-                Show in Finder
+                Show
               </button>
             </div>
           </section>
-          <p className="settings-footnote settings-path">{memoryStatus?.dataDir ?? 'The archive path appears after the first run.'}</p>
 
           <h2 className="settings-section-title">Capture</h2>
           <section className="settings-group">
@@ -4112,7 +4181,24 @@ function App() {
             </div>
           </section>
 
-          <p className="settings-version">Vanilla Shoot {APP_VERSION_LABEL}</p>
+          <h2 className="settings-section-title">About</h2>
+          <section className="settings-group">
+            <div className="settings-row">
+              <span className="settings-row-label">Version</span>
+              <span className="settings-row-value">{APP_VERSION_LABEL}</span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-row-label">Author</span>
+              <span className="settings-row-value">hack-jitsu.com</span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-row-label">Source</span>
+              <button className="settings-button" onClick={() => void handleOpenProjectPage()} type="button">
+                GitHub
+              </button>
+            </div>
+          </section>
+          <p className="settings-footnote">Capture, OCR and screen memory all run locally. Nothing is uploaded.</p>
         </main>
       )}
 

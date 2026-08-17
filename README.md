@@ -1,6 +1,6 @@
-# Vanilla Shoot
+# VanillaShot
 
-Vanilla Shoot is a local-first screenshot and screen memory app.
+VanillaShot is a local-first screenshot and screen memory app.
 It is inspired by CleanShot-style UX, but focused on OCR-driven redaction.
 
 Author: hack-jitsu.com
@@ -80,24 +80,24 @@ npm run tauri:build
 ## Raycast
 
 `raycast/` holds a Raycast extension with three commands: Capture Region,
-Toggle Screen Memory, and Search Screen Memory. Actions travel over the `vanillashoot://`
+Toggle Screen Memory, and Search Screen Memory. Actions travel over the `vanillashot://`
 URL scheme (a fixed set of verbs, no payloads, no open port); search reads the
 memory database read-only. See [raycast/README.md](raycast/README.md).
 
 ## Deep links
 
-The installed app registers the `vanillashoot://` scheme:
+The installed app registers the `vanillashot://` scheme:
 
 | URL | Action |
 | --- | --- |
-| `vanillashoot://capture` | Start a region capture |
-| `vanillashoot://show` | Reveal the main window |
-| `vanillashoot://memory/start` | Start screen memory (no-op if already recording) |
-| `vanillashoot://memory/stop` | Stop screen memory (no-op if idle) |
-| `vanillashoot://memory/toggle` | Flip screen memory |
+| `vanillashot://capture` | Start a region capture |
+| `vanillashot://show` | Reveal the main window |
+| `vanillashot://memory/start` | Start screen memory (no-op if already recording) |
+| `vanillashot://memory/stop` | Stop screen memory (no-op if idle) |
+| `vanillashot://memory/toggle` | Flip screen memory |
 
 ```bash
-open "vanillashoot://capture"
+open "vanillashot://capture"
 ```
 
 Unknown actions are logged and ignored.

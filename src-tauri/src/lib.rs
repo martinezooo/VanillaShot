@@ -120,6 +120,57 @@ fn open_screen_recording_settings() -> Result<(), CaptureError> {
     open_screen_recording_settings_impl()
 }
 
+/// Reports whether macOS has granted Screen Recording access.
+///
+/// `CGPreflightScreenCaptureAccess` answers without prompting, so the settings
+/// window can show the real state instead of only offering a button that may
+/// not be needed.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn screen_recording_access_granted() -> bool {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGPreflightScreenCaptureAccess() -> bool;
+    }
+
+    unsafe { CGPreflightScreenCaptureAccess() }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn screen_recording_access_granted() -> bool {
+    true
+}
+
+/// Where exported PNGs land, so the settings window can name the folder.
+#[tauri::command]
+fn capture_output_dir() -> String {
+    preferred_output_dir().to_string_lossy().to_string()
+}
+
+/// Opens the project page.
+///
+/// The URL is fixed here rather than passed in from the webview: a command that
+/// forwards an arbitrary string to `open` would hand anything running in the
+/// page a way to launch external handlers.
+#[tauri::command]
+fn open_project_page() -> Result<(), CaptureError> {
+    const PROJECT_URL: &str = "https://github.com/martinezooo/Repshot";
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("/usr/bin/open")
+            .arg(PROJECT_URL)
+            .status()
+            .map_err(|error| CaptureError::failed(format!("Could not open the project page: {error}")))?;
+
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    Err(CaptureError::failed("Opening links is supported only on macOS in this release"))
+}
+
 #[tauri::command]
 fn open_quick_capture_window(
     app_handle: tauri::AppHandle,
@@ -159,7 +210,7 @@ fn open_quick_capture_window(
         QUICK_EDITOR_WINDOW_LABEL,
         WebviewUrl::default(),
     )
-    .title("Vanilla Shoot Quick Editor")
+    .title("VanillaShot Quick Editor")
     .inner_size(frame.width, frame.height)
     .position(frame.x, frame.y)
     .resizable(false)
@@ -245,7 +296,7 @@ fn capture_region_macos() -> Result<String, CaptureError> {
         .unwrap_or_default()
         .as_millis();
     let file_path = std::env::temp_dir().join(format!(
-        "vanilla-shoot-region-{}-{}.png",
+        "vanilla-shot-region-{}-{}.png",
         std::process::id(),
         epoch_ms
     ));
@@ -312,7 +363,7 @@ fn save_capture_png_impl(
         CaptureError::failed(format!("Failed to create output directory: {error}"))
     })?;
 
-    let output_path = output_dir.join(format!("vanilla-shoot-{}-{}.png", std::process::id(), epoch_millis()));
+    let output_path = output_dir.join(format!("vanilla-shot-{}-{}.png", std::process::id(), epoch_millis()));
 
     fs::write(&output_path, image_bytes)
         .map_err(|error| CaptureError::failed(format!("Failed to write PNG file: {error}")))?;
@@ -340,7 +391,7 @@ fn persist_capture_note(
         .unwrap_or("capture.png");
 
     let note_body = format!(
-        "Vanilla Shoot note for {image_name}\nImage path: {}\n\n{trimmed_note}\n",
+        "VanillaShot note for {image_name}\nImage path: {}\n\n{trimmed_note}\n",
         image_path.to_string_lossy()
     );
 
@@ -538,7 +589,7 @@ fn build_tray_menu(
     let quit_item = tauri::menu::MenuItem::with_id(
         app_handle,
         TRAY_QUIT_MENU_ID,
-        "Quit Vanilla Shoot",
+        "Quit VanillaShot",
         true,
         Option::<&str>::None,
     )?;
@@ -572,7 +623,7 @@ fn tray_memory_label(app_handle: &tauri::AppHandle) -> &'static str {
 
 #[cfg(all(desktop, target_os = "macos"))]
 pub(crate) fn refresh_tray_menu(app_handle: &tauri::AppHandle) {
-    if let Some(tray) = app_handle.tray_by_id("vanilla-shoot-menubar") {
+    if let Some(tray) = app_handle.tray_by_id("vanilla-shot-menubar") {
         if let Ok(menu) = build_tray_menu(app_handle, tray_memory_label(app_handle)) {
             let _ = tray.set_menu(Some(menu));
         }
@@ -600,7 +651,7 @@ fn is_screen_capture_permission_error(stderr: &str) -> bool {
 
 #[cfg(target_os = "macos")]
 fn screen_recording_permission_message() -> &'static str {
-    "Vanilla Shoot needs macOS Screen Recording permission. Open System Settings > Privacy & Security > Screen & System Audio Recording, enable Vanilla Shoot, then restart Vanilla Shoot."
+    "VanillaShot needs macOS Screen Recording permission. Open System Settings > Privacy & Security > Screen & System Audio Recording, enable VanillaShot, then restart VanillaShot."
 }
 
 #[cfg(target_os = "macos")]
@@ -615,14 +666,14 @@ fn open_screen_recording_settings_impl() -> Result<(), CaptureError> {
     Ok(())
 }
 
-/// Handles one `vanillashoot://` URL.
+/// Handles one `vanillashot://` URL.
 ///
 /// Any process on the machine can open a deep link, so the surface is kept to a
 /// closed set of verbs that the tray menu already exposes. Nothing here accepts
 /// a path, a payload, or anything else an untrusted caller could steer.
 #[cfg(desktop)]
 fn handle_deep_link(app_handle: &tauri::AppHandle, raw_url: &str) {
-    let Some(action) = raw_url.trim().to_ascii_lowercase().strip_prefix("vanillashoot://").map(
+    let Some(action) = raw_url.trim().to_ascii_lowercase().strip_prefix("vanillashot://").map(
         |action| action.trim_matches('/').to_string(),
     ) else {
         return;
@@ -659,7 +710,7 @@ fn handle_deep_link(app_handle: &tauri::AppHandle, raw_url: &str) {
             });
         }
         other => {
-            log::warn!("Ignoring unknown deep link action: vanillashoot://{other}");
+            log::warn!("Ignoring unknown deep link action: vanillashot://{other}");
         }
     }
 }
@@ -725,7 +776,7 @@ pub fn run() {
             {
                 use tauri::tray::TrayIconBuilder;
 
-                // Keep Vanilla Shoot as a background utility (menu bar style) instead of a regular Dock app.
+                // Keep VanillaShot as a background utility (menu bar style) instead of a regular Dock app.
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                 if let Some(main_window) = app.get_webview_window("main") {
@@ -739,9 +790,9 @@ pub fn run() {
                     .cloned()
                     .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?;
 
-                let _ = TrayIconBuilder::with_id("vanilla-shoot-menubar")
+                let _ = TrayIconBuilder::with_id("vanilla-shot-menubar")
                     .icon(tray_icon)
-                    .tooltip("Vanilla Shoot")
+                    .tooltip("VanillaShot")
                     .menu(&tray_menu)
                     .show_menu_on_left_click(true)
                     .on_menu_event(move |app_handle, menu_event| {
@@ -798,6 +849,9 @@ pub fn run() {
             show_main_capture_window,
             hide_main_capture_window,
             open_screen_recording_settings,
+            screen_recording_access_granted,
+            capture_output_dir,
+            open_project_page,
             open_quick_capture_window,
             take_pending_quick_capture,
             memory::commands::memory_start,

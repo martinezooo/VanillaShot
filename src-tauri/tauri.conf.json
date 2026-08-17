@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Vanilla Shoot",
+  "productName": "VanillaShot",
   "version": "0.1.22",
-  "identifier": "com.hackjitsu.vanillashoot",
+  "identifier": "com.hackjitsu.vanillashot",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -13,9 +13,9 @@
     "windows": [
       {
         "label": "main",
-        "title": "Vanilla Shoot Settings",
+        "title": "VanillaShot Settings",
         "width": 520,
-        "height": 600,
+        "height": 700,
         "minWidth": 460,
         "minHeight": 460,
         "resizable": true,
@@ -32,7 +32,7 @@
     "deep-link": {
       "desktop": {
         "schemes": [
-          "vanillashoot"
+          "vanillashot"
         ]
       }
     }
