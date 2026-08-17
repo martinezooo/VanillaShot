@@ -13,15 +13,14 @@
     "windows": [
       {
         "label": "main",
-        "title": "Vanilla Shoot v0.1.22",
+        "title": "Vanilla Shoot Settings",
         "width": 520,
-        "height": 620,
+        "height": 600,
         "minWidth": 460,
-        "minHeight": 520,
+        "minHeight": 460,
         "resizable": true,
         "fullscreen": false,
-        "transparent": true,
-        "backgroundColor": "#00000000"
+        "transparent": false
       }
     ],
     "macOSPrivateApi": true,

@@ -33,7 +33,13 @@ body {
   margin: 0;
   min-width: 320px;
   color: var(--ink-100);
-  background: #0c0a08;
+  background: #ececec;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #1e1e1e;
+  }
 }
 
 html.quick-editor-open,

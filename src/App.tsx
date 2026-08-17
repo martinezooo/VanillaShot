@@ -1537,7 +1537,7 @@ function App() {
           return
         }
 
-        await getCurrentWindow().setTitle(`Vanilla Shoot ${APP_VERSION_LABEL}`)
+        await getCurrentWindow().setTitle('Vanilla Shoot Settings')
       } catch {
         // Ignore web runtime and restricted desktop environments.
       }
@@ -4026,99 +4026,93 @@ function App() {
 
       {!quickEditorOpen && !isDedicatedQuickWindow && !showCornerMemoryHud && (
         <main className="settings-shell">
-          <header className="settings-head">
-            <div>
-              <h1>Vanilla Shoot</h1>
-              <p>All capture stays on this machine</p>
-            </div>
-            <span className="settings-version">{APP_VERSION_LABEL}</span>
-          </header>
-
           {launcherFeedback && (
             <div className={`settings-banner ${launcherFeedback.tone}`} role="status" aria-live="polite">
               {launcherFeedback.detail}
             </div>
           )}
 
+          <h2 className="settings-section-title">Screen Memory</h2>
           <section className="settings-group">
             <div className="settings-row">
-              <div className="settings-label">
-                <strong>Screen memory</strong>
-                <span>
-                  {!desktopRuntime
-                    ? 'Desktop only'
-                    : memoryStatus?.recording
-                      ? 'Recording to a local archive'
-                      : 'Idle'}
-                </span>
-              </div>
+              <span className="settings-row-label">Record screen memory</span>
               <button
-                className={`settings-toggle ${memoryStatus?.recording ? 'on' : ''}`}
+                className={`settings-switch ${memoryStatus?.recording ? 'on' : ''}`}
                 onClick={() => void handleToggleMemoryRecording()}
                 type="button"
+                role="switch"
+                aria-checked={Boolean(memoryStatus?.recording)}
+                aria-label="Record screen memory"
                 disabled={!desktopRuntime || memoryActionLoading}
               >
-                {memoryStatus?.recording ? <Square size={12} /> : <Play size={12} />}
-                {memoryActionLoading ? 'Working' : memoryStatus?.recording ? 'Stop' : 'Start'}
+                <span className="settings-switch-knob" />
               </button>
             </div>
-
-            <div className="settings-row static">
-              <span>Frame interval</span>
-              <strong>{memoryStatus?.frameIntervalSecs ?? 10}s</strong>
+            <div className="settings-row">
+              <span className="settings-row-label">Frame interval</span>
+              <span className="settings-row-value">{memoryStatus?.frameIntervalSecs ?? 10} seconds</span>
             </div>
-            <div className="settings-row static">
-              <span>Retention</span>
-              <strong>{memoryStatus?.retentionDays ?? 30} days</strong>
+            <div className="settings-row">
+              <span className="settings-row-label">Keep recordings for</span>
+              <span className="settings-row-value">{memoryStatus?.retentionDays ?? 30} days</span>
             </div>
-            <div className="settings-row static">
-              <span>Stored</span>
-              <strong>
+            <div className="settings-row">
+              <span className="settings-row-label">Stored</span>
+              <span className="settings-row-value">
                 {hasMemoryStats
-                  ? `${memoryStatus?.stats?.frameCount ?? 0} frames · ${formatBlobSize(memoryStatus?.stats?.diskUsageBytes ?? 0)}`
+                  ? `${memoryStatus?.stats?.frameCount ?? 0} frames, ${formatBlobSize(memoryStatus?.stats?.diskUsageBytes ?? 0)}`
                   : 'Nothing yet'}
-              </strong>
+              </span>
             </div>
           </section>
+          <p className="settings-footnote">
+            {desktopRuntime
+              ? 'Frames and OCR text are written to a local archive. Nothing leaves this Mac.'
+              : 'Screen memory is available in the desktop app only.'}
+          </p>
 
+          <h2 className="settings-section-title">Permissions &amp; Files</h2>
           <section className="settings-group">
             <div className="settings-row">
-              <div className="settings-label">
-                <strong>Screen Recording permission</strong>
-                <span>Required for region capture and screen memory</span>
-              </div>
-              <button className="settings-action" onClick={() => void handleOpenRecordingSettings()} type="button">
-                Open
+              <span className="settings-row-label">Screen Recording access</span>
+              <button className="settings-button" onClick={() => void handleOpenRecordingSettings()} type="button">
+                Open System Settings
               </button>
             </div>
-
             <div className="settings-row">
-              <div className="settings-label">
-                <strong>Local archive</strong>
-                <span className="settings-path">{memoryStatus?.dataDir ?? 'Appears after the first run'}</span>
-              </div>
+              <span className="settings-row-label">Local archive</span>
               <button
-                className="settings-action"
+                className="settings-button"
                 onClick={() => void handleRevealArchive()}
                 type="button"
                 disabled={!memoryStatus?.dataDir}
               >
-                Reveal
+                Show in Finder
+              </button>
+            </div>
+          </section>
+          <p className="settings-footnote settings-path">{memoryStatus?.dataDir ?? 'The archive path appears after the first run.'}</p>
+
+          <h2 className="settings-section-title">Capture</h2>
+          <section className="settings-group">
+            <div className="settings-row">
+              <span className="settings-row-label">Capture a region</span>
+              <span className="settings-row-trailing">
+                <kbd className="settings-kbd">&#8984;&#8679;1</kbd>
+                <button className="settings-button" onClick={() => void handleCaptureScreen()} type="button">
+                  Capture
+                </button>
+              </span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-row-label">Edit an existing image</span>
+              <button className="settings-button" onClick={handleOpenFilePicker} type="button">
+                Choose File
               </button>
             </div>
           </section>
 
-          <footer className="settings-foot">
-            <button className="settings-action" onClick={() => void handleCaptureScreen()} type="button">
-              <Crosshair size={12} />
-              Capture region
-            </button>
-            <button className="settings-action" onClick={handleOpenFilePicker} type="button">
-              <FolderOpen size={12} />
-              Open image
-            </button>
-            <span className="settings-hint">Cmd/Ctrl+Shift+1 anywhere</span>
-          </footer>
+          <p className="settings-version">Vanilla Shoot {APP_VERSION_LABEL}</p>
         </main>
       )}
 

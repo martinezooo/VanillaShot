@@ -33,13 +33,23 @@
   display: none;
 }
 
+/* The settings window follows the system appearance instead of the app's
+   dark vanilla theme, so it gets no decorative overlay at all. */
+.app-shell:not(.quick-mode) {
+  background: #ececec;
+  padding: 18px 20px;
+  overflow-y: auto;
+  height: 100vh;
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-shell:not(.quick-mode) {
+    background: #1e1e1e;
+  }
+}
+
 .app-shell::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(circle at 50% -20%, rgba(255, 214, 102, 0.06), transparent 60%);
-  z-index: 0;
+  display: none;
 }
 
 .app-shell:not(.quick-mode) > * {
@@ -2718,167 +2728,225 @@
 
 /* --------------------------------------------------------------------------
    Settings window
-   Reached from the tray, not shown on capture. Deliberately plain: a short
-   list of rows, no hero, no decoration.
+
+   Styled after macOS System Settings: system font, grouped inset rows with
+   hairline separators, native-style switches and bezel buttons. Follows the
+   system appearance, so it is the only part of the app that is not locked to
+   the dark vanilla theme.
    -------------------------------------------------------------------------- */
 
 .settings-shell {
+  --vs-window: #ececec;
+  --vs-group: #ffffff;
+  --vs-text: #000000;
+  --vs-secondary: rgba(0, 0, 0, 0.5);
+  --vs-separator: rgba(0, 0, 0, 0.09);
+  --vs-accent: #007aff;
+  --vs-button: #ffffff;
+  --vs-button-border: rgba(0, 0, 0, 0.14);
+  --vs-switch-off: rgba(0, 0, 0, 0.16);
+
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--vs-text);
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  max-width: 460px;
   width: 100%;
+  max-width: 520px;
   margin: 0 auto;
-  padding: 0.4rem 0;
+  padding: 0 4px 8px;
+  -webkit-font-smoothing: antialiased;
 }
 
-.settings-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+@media (prefers-color-scheme: dark) {
+  .settings-shell {
+    --vs-window: #1e1e1e;
+    --vs-group: #2c2c2e;
+    --vs-text: #ffffff;
+    --vs-secondary: rgba(255, 255, 255, 0.55);
+    --vs-separator: rgba(255, 255, 255, 0.1);
+    --vs-accent: #0a84ff;
+    --vs-button: #48484a;
+    --vs-button-border: rgba(255, 255, 255, 0.12);
+    --vs-switch-off: rgba(255, 255, 255, 0.18);
+  }
 }
 
-.settings-head h1 {
-  margin: 0;
-  color: var(--ink-50);
-  font-size: 1.05rem;
+.settings-section-title {
+  margin: 14px 0 6px 4px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--vs-text);
 }
 
-.settings-head p {
-  margin: 0.15rem 0 0;
-  color: var(--ink-400);
-  font-size: 0.7rem;
-}
-
-.settings-version {
-  color: var(--ink-500);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.66rem;
-  padding-top: 0.2rem;
-}
-
-.settings-banner {
-  border-radius: 10px;
-  border: 1px solid var(--line-accent-soft);
-  background: rgba(239, 184, 55, 0.08);
-  color: var(--ink-100);
-  padding: 0.5rem 0.65rem;
-  font-size: 0.72rem;
-  line-height: 1.4;
-}
-
-.settings-banner.error {
-  border-color: rgba(216, 96, 44, 0.4);
-  background: rgba(216, 96, 44, 0.1);
+.settings-section-title:first-of-type {
+  margin-top: 4px;
 }
 
 .settings-group {
   display: flex;
   flex-direction: column;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.025);
+  border-radius: 8px;
+  background: var(--vs-group);
   overflow: hidden;
 }
 
 .settings-row {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.9rem;
-  padding: 0.68rem 0.8rem;
-  min-height: 46px;
+  gap: 12px;
+  min-height: 38px;
+  padding: 6px 12px;
 }
 
-.settings-row + .settings-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+/* Hairline separators are inset from the left, the way native lists draw them. */
+.settings-row + .settings-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 0;
+  height: 1px;
+  background: var(--vs-separator);
 }
 
-.settings-row.static {
-  color: var(--ink-300);
-  font-size: 0.74rem;
-}
-
-.settings-row.static strong {
-  color: var(--ink-100);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.settings-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.12rem;
+.settings-row-label {
+  color: var(--vs-text);
   min-width: 0;
 }
 
-.settings-label strong {
-  color: var(--ink-100);
-  font-size: 0.78rem;
-  font-weight: 600;
+.settings-row-value {
+  color: var(--vs-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
-.settings-label span {
-  color: var(--ink-400);
-  font-size: 0.68rem;
-  line-height: 1.35;
+.settings-row-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.settings-path {
+.settings-footnote {
+  margin: 6px 4px 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--vs-secondary);
+}
+
+.settings-footnote.settings-path {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.62rem !important;
+  font-size: 10px;
   overflow-wrap: anywhere;
 }
 
-.settings-toggle,
-.settings-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.32rem;
+.settings-version {
+  margin: 18px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--vs-secondary);
+}
+
+.settings-banner {
+  margin-bottom: 10px;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 11px;
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--vs-text);
+}
+
+.settings-banner.error {
+  background: rgba(255, 59, 48, 0.14);
+}
+
+/* Bezel button ----------------------------------------------------------- */
+
+.settings-button {
   flex-shrink: 0;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--ink-100);
-  padding: 0.34rem 0.7rem;
-  font-size: 0.72rem;
-  font-weight: 500;
+  font: inherit;
+  font-size: 12px;
+  color: var(--vs-text);
+  background: var(--vs-button);
+  border: 1px solid var(--vs-button-border);
+  border-radius: 6px;
+  padding: 3px 11px;
+  min-height: 22px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
 }
 
-.settings-toggle:hover:not(:disabled),
-.settings-action:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(242, 223, 176, 0.32);
+.settings-button:hover:not(:disabled) {
+  filter: brightness(0.97);
 }
 
-.settings-toggle.on {
-  border-color: rgba(242, 223, 176, 0.5);
-  background: rgba(242, 223, 176, 0.14);
-  color: #f7ecd2;
+@media (prefers-color-scheme: dark) {
+  .settings-button:hover:not(:disabled) {
+    filter: brightness(1.2);
+  }
 }
 
-.settings-toggle:disabled,
-.settings-action:disabled {
+.settings-button:active:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.settings-button:disabled {
   opacity: 0.4;
-  cursor: not-allowed;
+  cursor: default;
 }
 
-.settings-foot {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-  padding-top: 0.1rem;
+.settings-kbd {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--vs-secondary);
 }
 
-.settings-hint {
-  margin-left: auto;
-  color: var(--ink-500);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.62rem;
+/* Switch ----------------------------------------------------------------- */
+
+.settings-switch {
+  flex-shrink: 0;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 11px;
+  background: var(--vs-switch-off);
+  cursor: pointer;
+  transition: background 180ms ease;
+}
+
+.settings-switch.on {
+  background: var(--vs-accent);
+}
+
+.settings-switch:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 180ms ease;
+}
+
+.settings-switch.on .settings-switch-knob {
+  transform: translateX(16px);
+}
+
+.settings-switch:focus-visible {
+  outline: 3px solid rgba(0, 122, 255, 0.4);
+  outline-offset: 1px;
 }
