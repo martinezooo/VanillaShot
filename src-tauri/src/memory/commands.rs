@@ -87,8 +87,15 @@ pub async fn memory_stop(
         let _ = tx.send(true);
     }
 
-    // Wait briefly for the loop to notice the cancellation.
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    // Wait for the capture loop to actually clear the recording flag, so the
+    // reported "stopped" is true rather than optimistic. Bounded so a wedged
+    // recorder cannot hang the command.
+    for _ in 0..100 {
+        if !state.is_recording() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 
     #[cfg(all(desktop, target_os = "macos"))]
     crate::refresh_tray_menu(&app_handle);
@@ -112,20 +119,18 @@ pub async fn memory_status(
         .retention_days
         .load(std::sync::atomic::Ordering::Relaxed);
 
-    let stats = {
-        let db_guard = state.db.lock().await;
-        match &*db_guard {
-            Some(db) => Some(db.stats()?),
-            None => {
-                // Try opening the DB read-only to get stats even when not recording.
-                if state.db_path().exists() {
-                    let db = MemoryDb::open(&state.db_path())?;
-                    Some(db.stats()?)
-                } else {
-                    None
-                }
-            }
-        }
+    // stats() walks every segment and frame file on disk (a stat() per file).
+    // Doing that while holding the live DB mutex would stall the capture loop,
+    // which needs the same lock to insert frames. Use a short-lived read-only
+    // connection instead, so status polls never contend with recording.
+    let stats = if state.db_path().exists() {
+        let db_path = state.db_path();
+        tokio::task::spawn_blocking(move || MemoryDb::open(&db_path).and_then(|db| db.stats()))
+            .await
+            .map_err(|e| MemoryError::from(format!("Stats task failed: {e}")))?
+            .ok()
+    } else {
+        None
     };
 
     Ok(MemoryStatusPayload {

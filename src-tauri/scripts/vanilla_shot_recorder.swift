@@ -1,4 +1,4 @@
-/// AYE Memory – ScreenCaptureKit video recorder.
+/// VanillaShot Memory – ScreenCaptureKit video recorder.
 ///
 /// Records the primary display to a MOV file using H.264.
 /// Periodically saves JPEG keyframes and prints their paths to stdout
@@ -49,7 +49,7 @@ try? FileManager.default.createDirectory(atPath: framesDirArg, withIntermediateD
 // ---------------------------------------------------------------------------
 
 guard #available(macOS 12.3, *) else {
-    fputs("ERROR: AYE Memory requires macOS 12.3 or later.\n", stderr)
+    fputs("ERROR: VanillaShot Memory requires macOS 12.3 or later.\n", stderr)
     exit(1)
 }
 

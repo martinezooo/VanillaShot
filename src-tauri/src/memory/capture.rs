@@ -25,6 +25,10 @@ pub async fn start_capture_loop(
     std::fs::create_dir_all(&frames_dir)
         .map_err(|e| format!("Cannot create frames directory: {e}"))?;
 
+    // A stock Mac has no swiftc; fail with a clear message rather than a raw
+    // xcode-select error the first time a helper is compiled.
+    ocr::ensure_swiftc_available()?;
+
     // Compile helper binaries (one-time).
     let recorder_bin = ocr::ensure_recorder_binary(&state.recorder_binary_path())?;
     let ocr_bin = ocr::ensure_ocr_binary(&state.ocr_binary_path())?;
@@ -54,6 +58,7 @@ pub async fn start_capture_loop(
 
     tokio::spawn(async move {
         let mut segment_count: u64 = 0;
+        let mut consecutive_failures: u32 = 0;
         let mut cancel_rx = cancel_rx;
 
         loop {
@@ -79,14 +84,37 @@ pub async fn start_capture_loop(
                 db: &db,
             };
 
+            let seg_started = std::time::Instant::now();
             let result = record_one_segment(segment_request, &mut cancel_rx).await;
 
             match result {
                 Ok(seg_id) => {
                     log::info!("Memory: finished segment #{seg_id} ({seg_name})");
+                    consecutive_failures = 0;
                 }
                 Err(e) => {
                     log::warn!("Memory: segment {seg_name} failed: {e}");
+                    // A segment that fails almost instantly means the recorder
+                    // cannot start (missing permission, missing binary). Without
+                    // a backoff the loop would respawn it thousands of times a
+                    // second. Grow the wait up to 30s and give up after a while.
+                    if seg_started.elapsed() < std::time::Duration::from_secs(2) {
+                        consecutive_failures += 1;
+                        if consecutive_failures >= 10 {
+                            log::error!(
+                                "Memory: recorder failed {consecutive_failures} times in a row; stopping capture"
+                            );
+                            break;
+                        }
+                        let backoff = std::cmp::min(30, 1u64 << consecutive_failures.min(5));
+                        tokio::select! {
+                            _ = tokio::time::sleep(std::time::Duration::from_secs(backoff)) => {}
+                            _ = cancel_rx.changed() => {}
+                        }
+                        if *cancel_rx.borrow() {
+                            break;
+                        }
+                    }
                 }
             }
 

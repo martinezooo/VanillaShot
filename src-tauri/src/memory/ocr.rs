@@ -1,6 +1,19 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Returns Ok(()) when a usable `swiftc` is on PATH, or a user-facing message
+/// explaining how to get one. Screen memory compiles its helpers with swiftc at
+/// first use, and a stock Mac without the Command Line Tools does not have it.
+pub fn ensure_swiftc_available() -> Result<(), String> {
+    match Command::new("swiftc").arg("--version").output() {
+        Ok(output) if output.status.success() => Ok(()),
+        _ => Err(
+            "Screen memory needs Apple's Swift compiler, which is part of the Xcode Command Line              Tools. Install them with `xcode-select --install`, then start screen memory again."
+                .to_string(),
+        ),
+    }
+}
+
 /// The embedded Swift source for Vision-based OCR.
 const OCR_SWIFT_SOURCE: &str = include_str!("../../scripts/ocr_vision.swift");
 
