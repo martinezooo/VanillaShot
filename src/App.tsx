@@ -1445,6 +1445,14 @@ function App() {
   const handleCaptureScreen = useCallback(async () => {
     try {
       setErrorMessage('')
+
+      // On the desktop the frozen-overlay flow handles selection and opens the
+      // editor itself, so just start it and return.
+      if (isTauri()) {
+        await invoke('begin_capture')
+        return
+      }
+
       const result = await captureRegion()
 
       if (isDesktopRuntime() && !isDedicatedQuickWindow) {

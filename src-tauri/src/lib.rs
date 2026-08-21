@@ -12,11 +12,13 @@ use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 mod memory;
 
+#[allow(dead_code)] // used only by the non-macOS capture path
 const CAPTURE_READY_EVENT: &str = "capture://ready";
 const QUICK_EDITOR_CAPTURE_READY_EVENT: &str = "capture://quick-editor-ready";
 const CAPTURE_ERROR_EVENT: &str = "capture://error";
 const GLOBAL_SHORTCUT_ACCELERATORS: [&str; 2] = ["cmd+shift+1", "ctrl+shift+1"];
 const QUICK_EDITOR_WINDOW_LABEL: &str = "quick-editor";
+const CAPTURE_OVERLAY_WINDOW_LABEL: &str = "capture-overlay";
 #[cfg(all(desktop, target_os = "macos"))]
 const TRAY_CAPTURE_MENU_ID: &str = "tray_capture_region";
 #[cfg(all(desktop, target_os = "macos"))]
@@ -29,6 +31,21 @@ const TRAY_SHOW_MENU_ID: &str = "tray_show";
 #[derive(Default)]
 struct PendingQuickCaptureState {
     payload: Mutex<Option<CaptureReadyPayload>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FrozenCapturePayload {
+    image_data_url: String,
+    width: u32,
+    height: u32,
+    scale_factor: f64,
+    cursor: Option<DesktopCursorPoint>,
+}
+
+#[derive(Default)]
+struct PendingFrozenCaptureState {
+    payload: Mutex<Option<FrozenCapturePayload>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -539,7 +556,239 @@ fn hide_main_window<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
     }
 }
 
+/// Computes a monitor's logical bounds (points), used for both the screencapture
+/// region and the overlay window placement.
+#[cfg(target_os = "macos")]
+fn monitor_logical_bounds<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    cursor: Option<&DesktopCursorPoint>,
+) -> Result<(f64, f64, f64, f64, f64), CaptureError> {
+    let monitors = app_handle
+        .available_monitors()
+        .map_err(|e| CaptureError::failed(format!("Could not inspect monitors: {e}")))?;
+    let mut chosen = app_handle
+        .primary_monitor()
+        .map_err(|e| CaptureError::failed(format!("Could not inspect primary monitor: {e}")))?;
+
+    if let Some(cursor) = cursor {
+        if let Some(found) = monitors.iter().find(|m| {
+            let x = f64::from(m.position().x);
+            let y = f64::from(m.position().y);
+            let w = f64::from(m.size().width);
+            let h = f64::from(m.size().height);
+            cursor.x >= x && cursor.x < x + w && cursor.y >= y && cursor.y < y + h
+        }) {
+            chosen = Some(found.clone());
+        }
+    }
+
+    let monitor = chosen.ok_or_else(|| CaptureError::failed("No monitor available for capture"))?;
+    let scale = monitor.scale_factor();
+    let x = f64::from(monitor.position().x) / scale;
+    let y = f64::from(monitor.position().y) / scale;
+    let w = f64::from(monitor.size().width) / scale;
+    let h = f64::from(monitor.size().height) / scale;
+    Ok((x, y, w, h, scale))
+}
+
+/// Grabs a still of the given display region (logical points) into a data URL.
+#[cfg(target_os = "macos")]
+fn capture_display_still(x: f64, y: f64, w: f64, h: f64) -> Result<(String, u32, u32), CaptureError> {
+    let file_path = std::env::temp_dir().join(format!(
+        "vanilla-shot-frozen-{}-{}.png",
+        std::process::id(),
+        epoch_millis()
+    ));
+
+    let region = format!(
+        "{},{},{},{}",
+        x.round() as i64,
+        y.round() as i64,
+        w.round() as i64,
+        h.round() as i64
+    );
+
+    let output = Command::new("/usr/sbin/screencapture")
+        .args(["-x", "-r", "-R", &region])
+        .arg(&file_path)
+        .output()
+        .map_err(|e| CaptureError::failed(format!("Failed to launch screencapture: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let _ = fs::remove_file(&file_path);
+        if is_screen_capture_permission_error(&stderr) {
+            return Err(CaptureError::failed(screen_recording_permission_message()));
+        }
+        return Err(CaptureError::failed(format!(
+            "screencapture failed while freezing the screen: {stderr}"
+        )));
+    }
+
+    let bytes = fs::read(&file_path)
+        .map_err(|e| CaptureError::failed(format!("Failed to read frozen capture: {e}")))?;
+    let _ = fs::remove_file(&file_path);
+    if bytes.is_empty() {
+        return Err(CaptureError::failed(screen_recording_permission_message()));
+    }
+
+    let (width, height) = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+        .map_err(|e| CaptureError::failed(format!("Failed to decode frozen capture: {e}")))?
+        .dimensions();
+
+    Ok((
+        format!("data:image/png;base64,{}", STANDARD.encode(bytes)),
+        width,
+        height,
+    ))
+}
+
+/// Opens the frozen-selection overlay: hides the app, freezes the display under
+/// the cursor, and shows a full-display window the user selects a region on.
+#[cfg(target_os = "macos")]
+fn start_frozen_capture(app_handle: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        if !screen_recording_access_granted_impl() {
+            show_main_window(&app_handle);
+            let _ = app_handle.emit(
+                CAPTURE_ERROR_EVENT,
+                CaptureError::failed(screen_recording_permission_message()),
+            );
+            return;
+        }
+
+        let cursor = app_handle.cursor_position().ok().map(|p| DesktopCursorPoint {
+            x: p.x,
+            y: p.y,
+        });
+
+        // Hide the app so it is never in the still.
+        if let Some(w) = app_handle.get_webview_window("main") {
+            let _ = w.hide();
+        }
+        if let Some(w) = app_handle.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
+            let _ = w.hide();
+        }
+        std::thread::sleep(Duration::from_millis(120));
+
+        let bounds = monitor_logical_bounds(&app_handle, cursor.as_ref());
+        let (mx, my, mw, mh, scale) = match bounds {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = app_handle.emit(CAPTURE_ERROR_EVENT, e);
+                return;
+            }
+        };
+
+        let still = capture_display_still(mx, my, mw, mh);
+        let (image_data_url, width, height) = match still {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = app_handle.emit(CAPTURE_ERROR_EVENT, e);
+                return;
+            }
+        };
+
+        let payload = FrozenCapturePayload {
+            image_data_url,
+            width,
+            height,
+            scale_factor: scale,
+            cursor,
+        };
+
+        if let Some(state) = app_handle.try_state::<PendingFrozenCaptureState>() {
+            if let Ok(mut pending) = state.payload.lock() {
+                *pending = Some(payload);
+            }
+        }
+
+        // A borderless, always-on-top window filling the display, showing the
+        // still. Opaque so nothing behind bleeds through.
+        let mut builder = WebviewWindowBuilder::new(
+            &app_handle,
+            CAPTURE_OVERLAY_WINDOW_LABEL,
+            WebviewUrl::default(),
+        )
+        .title("VanillaShot Capture")
+        .inner_size(mw, mh)
+        .position(mx, my)
+        .resizable(false)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(true)
+        .shadow(false);
+
+        builder = builder.visible_on_all_workspaces(true);
+
+        match builder.build() {
+            Ok(overlay) => {
+                let _ = overlay.show();
+                let _ = overlay.set_focus();
+                let _ = overlay.set_always_on_top(true);
+            }
+            Err(e) => {
+                show_main_window(&app_handle);
+                let _ = app_handle.emit(
+                    CAPTURE_ERROR_EVENT,
+                    CaptureError::failed(format!("Could not open the capture overlay: {e}")),
+                );
+            }
+        }
+    });
+}
+
+#[tauri::command]
+fn take_pending_frozen_capture(
+    window: WebviewWindow,
+    state: tauri::State<'_, PendingFrozenCaptureState>,
+) -> Result<Option<FrozenCapturePayload>, CaptureError> {
+    if window.label() != CAPTURE_OVERLAY_WINDOW_LABEL {
+        return Ok(None);
+    }
+    let mut pending = state
+        .payload
+        .lock()
+        .map_err(|_| CaptureError::failed("Could not read pending frozen capture"))?;
+    Ok(pending.take())
+}
+
+/// Starts a region capture (the frozen overlay on macOS). Fire-and-forget:
+/// the overlay opens the editor itself once a region is chosen.
+#[tauri::command]
+fn begin_capture(app_handle: tauri::AppHandle) {
+    start_background_capture(app_handle);
+}
+
+#[tauri::command]
+fn cancel_frozen_capture(app_handle: tauri::AppHandle) {
+    if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
+        let _ = overlay.close();
+    }
+}
+
+#[tauri::command]
+fn finish_frozen_capture(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, PendingQuickCaptureState>,
+    data_url: String,
+    cursor: Option<DesktopCursorPoint>,
+) -> Result<(), CaptureError> {
+    if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
+        let _ = overlay.close();
+    }
+    open_quick_capture_window(app_handle, state, data_url, cursor)
+}
+
 fn start_background_capture(app_handle: tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        start_frozen_capture(app_handle);
+        return;
+    }
+
+    #[cfg(not(target_os = "macos"))]
     tauri::async_runtime::spawn(async move {
         match capture_region_with_window(&app_handle) {
             Ok(data_url) => {
@@ -721,6 +970,7 @@ fn handle_deep_link(app_handle: &tauri::AppHandle, raw_url: &str) {
 pub fn run() {
     tauri::Builder::default()
         .manage(PendingQuickCaptureState::default())
+        .manage(PendingFrozenCaptureState::default())
         .manage(memory::MemoryState::new())
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -858,6 +1108,10 @@ pub fn run() {
             open_project_page,
             open_quick_capture_window,
             take_pending_quick_capture,
+            take_pending_frozen_capture,
+            finish_frozen_capture,
+            cancel_frozen_capture,
+            begin_capture,
             memory::commands::memory_start,
             memory::commands::memory_stop,
             memory::commands::memory_status,

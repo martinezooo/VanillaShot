@@ -4,7 +4,8 @@
   "description": "enables the default permissions",
   "windows": [
     "main",
-    "quick-editor"
+    "quick-editor",
+    "capture-overlay"
   ],
   "permissions": [
     "core:default",

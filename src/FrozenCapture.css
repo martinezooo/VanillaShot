@@ -1,0 +1,110 @@
+.frozen-root {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  cursor: crosshair;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Dim the frozen still so the selected region reads as the only lit area. */
+.frozen-dim {
+  position: absolute;
+  background: rgba(10, 8, 6, 0.5);
+}
+
+.frozen-dim-full {
+  inset: 0;
+}
+
+.frozen-selection {
+  position: absolute;
+  border: 1.5px solid rgba(255, 178, 58, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 8px 30px -12px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.frozen-badge {
+  position: absolute;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(20, 17, 13, 0.92);
+  color: #ffedcf;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.frozen-crosshair-h,
+.frozen-crosshair-v {
+  position: absolute;
+  background: rgba(255, 178, 58, 0.55);
+  pointer-events: none;
+}
+
+.frozen-crosshair-h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.frozen-crosshair-v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.frozen-hint {
+  position: absolute;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  border-radius: 10px;
+  background: rgba(20, 17, 13, 0.82);
+  color: #f2e6cf;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.frozen-blank {
+  background: rgba(10, 8, 6, 0.35);
+}
+
+.frozen-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(10, 8, 6, 0.78);
+  color: #f2e6cf;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  cursor: default;
+}
+
+.frozen-error p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.frozen-error span {
+  font-size: 12px;
+  color: #b8ac9b;
+}
