@@ -18,7 +18,7 @@ No port, no daemon, no token file:
   is one of a fixed set of verbs handled in `src-tauri/src/lib.rs`; the scheme
   accepts no paths or payloads, so nothing else on the machine can steer VanillaShot
   through it. Opening a link launches VanillaShot if it is not already running.
-- **Search** reads `~/Pictures/VanillaShot Memory/memory.db` directly, read-only, via
+- **Search** reads `~/Library/Application Support/com.hackjitsu.vanillashot/memory.db` directly, read-only, via
   `useSQL` from `@raycast/utils`.
 
 ## Requirements

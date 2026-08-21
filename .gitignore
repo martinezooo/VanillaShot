@@ -35,3 +35,6 @@ src-tauri/icons/StoreLogo.png
 
 # Local test fixture, never shipped
 public/__test-fixture.png
+
+# Swift helpers compiled by build.rs and bundled as resources
+src-tauri/gen/helpers/

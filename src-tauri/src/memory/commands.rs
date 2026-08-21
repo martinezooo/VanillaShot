@@ -56,7 +56,11 @@ pub async fn memory_start(
         return Ok("Already recording".into());
     }
 
-    let cancel_tx = capture::start_capture_loop(&state).await?;
+    // Helpers ship pre-compiled inside the bundle; resolve them from Resources.
+    let recorder_bin = crate::memory::ocr::resolve_helper(&app_handle, "vanilla_shot_recorder")?;
+    let ocr_bin = crate::memory::ocr::resolve_helper(&app_handle, "ocr_vision")?;
+
+    let cancel_tx = capture::start_capture_loop(&state, recorder_bin, ocr_bin).await?;
 
     {
         let mut token = state.cancel_token.lock().await;

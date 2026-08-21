@@ -22,7 +22,11 @@
 
 The app is **VanillaShot**. Historical names survive only where removing them would break an existing install:
 
-- `src-tauri/src/memory/mod.rs` migrates `~/Pictures/Vanilla Shoot Memory`, `~/Pictures/AYE Memory`, `~/Pictures/Vulshot Memory`, and `~/Library/Application Support/com.vulshot/memory` into `~/Pictures/VanillaShot Memory`. Keep those fallbacks.
+- `src-tauri/src/memory/mod.rs` stores screen-memory data in `~/Library/Application Support/com.hackjitsu.vanillashot/` and migrates the earlier `~/Pictures/*` locations and `~/Library/Application Support/com.vulshot/memory` into it. Keep those fallbacks.
 - `raycast/src/vanillaShot.ts` carries the same list so the extension resolves an un-migrated install.
 
 Everything else — bundle identifier `com.hackjitsu.vanillashot`, deep link scheme `vanillashot://`, crate `vanilla-shot`, lib `vanilla_shot_lib` — uses the current name.
+
+## Screen-memory helpers
+
+The OCR and recorder Swift helpers are compiled at build time by `src-tauri/build.rs` into `src-tauri/gen/helpers/` and shipped as bundle resources (`Contents/Resources/helpers/`), resolved at runtime via `resolve_helper`. Do not reintroduce runtime `swiftc` compilation or write executables into the data directory.

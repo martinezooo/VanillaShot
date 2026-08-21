@@ -17,6 +17,8 @@ fn segment_name() -> String {
 /// Start the background video capture loop. Returns a cancel sender.
 pub async fn start_capture_loop(
     state: &MemoryState,
+    recorder_bin: std::path::PathBuf,
+    ocr_bin: std::path::PathBuf,
 ) -> Result<tokio::sync::watch::Sender<bool>, String> {
     let segments_dir = state.segments_dir();
     let frames_dir = state.frames_dir();
@@ -24,14 +26,6 @@ pub async fn start_capture_loop(
         .map_err(|e| format!("Cannot create segments directory: {e}"))?;
     std::fs::create_dir_all(&frames_dir)
         .map_err(|e| format!("Cannot create frames directory: {e}"))?;
-
-    // A stock Mac has no swiftc; fail with a clear message rather than a raw
-    // xcode-select error the first time a helper is compiled.
-    ocr::ensure_swiftc_available()?;
-
-    // Compile helper binaries (one-time).
-    let recorder_bin = ocr::ensure_recorder_binary(&state.recorder_binary_path())?;
-    let ocr_bin = ocr::ensure_ocr_binary(&state.ocr_binary_path())?;
 
     // Open (or create) the database.
     {

@@ -17,6 +17,7 @@ export const runVanillaShotAction = async (action: VanillaShotAction, hud: strin
 // Kept in sync with memory_data_dir() in src-tauri/src/memory/mod.rs, including
 // the pre-rename locations so an older install still resolves.
 const MEMORY_DIR_CANDIDATES = [
+  join(homedir(), "Library", "Application Support", "com.hackjitsu.vanillashot"),
   join(homedir(), "Pictures", "VanillaShot Memory"),
   join(homedir(), "Pictures", "Vanilla Shoot Memory"),
   join(homedir(), "Pictures", "AYE Memory"),

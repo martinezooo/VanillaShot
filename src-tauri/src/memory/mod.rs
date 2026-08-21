@@ -4,7 +4,7 @@ pub mod db;
 pub mod ocr;
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -65,38 +65,65 @@ impl MemoryState {
     pub fn db_path(&self) -> PathBuf {
         self.data_dir.join("memory.db")
     }
-
-    /// Path to the compiled OCR binary.
-    pub fn ocr_binary_path(&self) -> PathBuf {
-        self.data_dir.join("bin").join("ocr_vision")
-    }
-
-    /// Path to the compiled screen recorder binary.
-    pub fn recorder_binary_path(&self) -> PathBuf {
-        self.data_dir.join("bin").join("vanilla_shot_recorder")
-    }
 }
 
 /// Resolve the base data directory for VanillaShot Memory.
 ///
-/// The app has been renamed several times (Vulshot -> AYE -> Vanilla Shoot ->
-/// VanillaShot). Each old location is migrated in turn so an existing install
-/// keeps its history; if a rename fails, the old directory is used as-is rather
-/// than silently starting an empty store next to the user's recordings.
+/// This is app-internal data (the SQLite database, video segments and JPEG
+/// frames), so it lives under Application Support per macOS convention, not in
+/// ~/Pictures. Exported screenshots the user saves deliberately still go to
+/// ~/Pictures (see `preferred_output_dir`).
+///
+/// The store has lived in several places across renames (Vulshot -> AYE ->
+/// Vanilla Shoot -> VanillaShot, and previously in ~/Pictures). Each old
+/// location is migrated in turn so an existing install keeps its history; if a
+/// rename fails, the old directory is used as-is rather than silently starting
+/// an empty store.
+/// Moves an existing store's contents into the new data directory. Only the
+/// live data is carried over - the database (with its WAL/SHM sidecars), the
+/// video segments and the JPEG frames. The old `bin/` folder of runtime-
+/// compiled helpers is intentionally left behind; helpers now ship in the app
+/// bundle and executables no longer belong in the data directory.
+fn migrate_store(from: &Path, to: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(to)?;
+
+    for name in [
+        "memory.db",
+        "memory.db-wal",
+        "memory.db-shm",
+        "ai-settings.json",
+        "segments",
+        "frames",
+    ] {
+        let src = from.join(name);
+        if src.exists() {
+            let _ = fs::rename(&src, to.join(name));
+        }
+    }
+
+    Ok(())
+}
+
 fn memory_data_dir() -> PathBuf {
     let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
         return std::env::temp_dir().join("vanilla-shot-memory");
     };
 
-    let pictures_dir = home.join("Pictures").join("VanillaShot Memory");
+    let data_dir = home
+        .join("Library")
+        .join("Application Support")
+        .join("com.hackjitsu.vanillashot");
 
-    if pictures_dir.exists() {
-        return pictures_dir;
+    // Already migrated: the database is the marker, since Tauri may have created
+    // the directory itself (for plugin state or logs) before any recording.
+    if data_dir.join("memory.db").exists() {
+        return data_dir;
     }
 
     // Newest first, so a machine carrying several old directories adopts the
     // most recent history.
     let legacy_dirs = [
+        home.join("Pictures").join("VanillaShot Memory"),
         home.join("Pictures").join("Vanilla Shoot Memory"),
         home.join("Pictures").join("AYE Memory"),
         home.join("Pictures").join("Vulshot Memory"),
@@ -107,20 +134,19 @@ fn memory_data_dir() -> PathBuf {
     ];
 
     for legacy_dir in legacy_dirs {
-        if !legacy_dir.exists() {
+        if !legacy_dir.join("memory.db").exists() {
             continue;
         }
 
-        if let Some(parent) = pictures_dir.parent() {
-            let _ = fs::create_dir_all(parent);
+        if migrate_store(&legacy_dir, &data_dir).is_ok() {
+            return data_dir;
         }
 
-        if fs::rename(&legacy_dir, &pictures_dir).is_err() {
-            return legacy_dir;
-        }
-
-        return pictures_dir;
+        // Migration failed; keep using the old location rather than starting
+        // an empty store.
+        return legacy_dir;
     }
 
-    pictures_dir
+    let _ = fs::create_dir_all(&data_dir);
+    data_dir
 }
