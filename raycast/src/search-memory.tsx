@@ -117,6 +117,9 @@ const FrameList = ({ databasePath }: { databasePath: string }) => {
   }
 
   const frames = data ?? [];
+  // /fts5/ is handled by falling back to LIKE; anything else is a real failure
+  // and should be shown, not hidden behind an empty "no frames" state.
+  const hardError = error && !/fts5/i.test(error.message) ? error : null;
 
   return (
     <List
@@ -127,12 +130,20 @@ const FrameList = ({ databasePath }: { databasePath: string }) => {
       throttle
     >
       <List.EmptyView
-        icon={Icon.MagnifyingGlass}
-        title={searchText ? "No matching frames" : "No frames recorded yet"}
+        icon={hardError ? Icon.Warning : Icon.MagnifyingGlass}
+        title={
+          hardError
+            ? "Could not read the memory database"
+            : searchText
+              ? "No matching frames"
+              : "No frames recorded yet"
+        }
         description={
-          searchText
-            ? "Try a shorter term - matching is prefix-based per word."
-            : "Start screen memory in VanillaShot to build a searchable local history."
+          hardError
+            ? hardError.message
+            : searchText
+              ? "Try a shorter term - matching is prefix-based per word."
+              : "Start screen memory in VanillaShot to build a searchable local history."
         }
       />
       {frames.map((frame) => (
