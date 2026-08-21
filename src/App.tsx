@@ -4240,7 +4240,7 @@ function App() {
             </div>
             <div className="settings-row">
               <span className="settings-row-label">Author</span>
-              <span className="settings-row-value">hack-jitsu.com</span>
+              <span className="settings-row-value">martinezooo · hack-jitsu.com</span>
             </div>
             <div className="settings-row">
               <span className="settings-row-label">Updates</span>

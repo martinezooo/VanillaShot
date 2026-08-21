@@ -2,7 +2,7 @@
 name = "vanilla-shot"
 version = "0.1.22"
 description = "VanillaShot desktop shell"
-authors = ["hack-jitsu.com"]
+authors = ["martinezooo · hack-jitsu.com"]
 license = ""
 repository = ""
 edition = "2021"

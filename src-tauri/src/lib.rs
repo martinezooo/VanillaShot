@@ -25,8 +25,6 @@ const TRAY_QUIT_MENU_ID: &str = "tray_quit";
 const TRAY_MEMORY_TOGGLE_ID: &str = "tray_memory_toggle";
 #[cfg(all(desktop, target_os = "macos"))]
 const TRAY_SHOW_MENU_ID: &str = "tray_show";
-#[cfg(all(desktop, target_os = "macos"))]
-const TRAY_SCREEN_RECORDING_SETTINGS_ID: &str = "tray_screen_recording_settings";
 
 #[derive(Default)]
 struct PendingQuickCaptureState {
@@ -587,14 +585,7 @@ fn build_tray_menu(
     let show_item = tauri::menu::MenuItem::with_id(
         app_handle,
         TRAY_SHOW_MENU_ID,
-        "Settings",
-        true,
-        Option::<&str>::None,
-    )?;
-    let screen_recording_settings_item = tauri::menu::MenuItem::with_id(
-        app_handle,
-        TRAY_SCREEN_RECORDING_SETTINGS_ID,
-        "Screen Recording Settings…",
+        "Settings…",
         true,
         Option::<&str>::None,
     )?;
@@ -616,7 +607,6 @@ fn build_tray_menu(
             &memory_item,
             &separator_primary,
             &show_item,
-            &screen_recording_settings_item,
             &separator_secondary,
             &quit_item,
         ],
@@ -627,9 +617,9 @@ fn build_tray_menu(
 fn tray_memory_label(app_handle: &tauri::AppHandle) -> &'static str {
     let state = app_handle.state::<memory::MemoryState>();
     if state.is_recording() {
-        "⏹ Stop Memory"
+        "Stop Screen Memory"
     } else {
-        "▶ Start Memory"
+        "Start Screen Memory"
     }
 }
 
@@ -849,11 +839,6 @@ pub fn run() {
 
                         if menu_event.id == TRAY_SHOW_MENU_ID {
                             show_main_window(app_handle);
-                            return;
-                        }
-
-                        if menu_event.id == TRAY_SCREEN_RECORDING_SETTINGS_ID {
-                            let _ = open_screen_recording_settings_impl();
                         }
                     })
                     .build(app.handle())?;

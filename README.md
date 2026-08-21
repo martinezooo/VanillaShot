@@ -3,7 +3,7 @@
 VanillaShot is a local-first screenshot and screen memory app.
 It is inspired by CleanShot-style UX, but focused on OCR-driven redaction.
 
-Author: hack-jitsu.com
+Author: martinezooo · hack-jitsu.com
 
 ## Desktop v1 scope
 
