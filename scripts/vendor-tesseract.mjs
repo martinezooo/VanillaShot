@@ -19,6 +19,13 @@ const outDir = join(root, "public", "tesseract");
 
 const files = [
   [join(root, "node_modules", "tesseract.js", "dist", "worker.min.js"), "worker.min.js"],
+  // worker.min.js opens with "For license information please see
+  // worker.min.js.LICENSE.txt", so the sidecar has to travel with it or the
+  // shipped bundle points at a file that is not there.
+  [
+    join(root, "node_modules", "tesseract.js", "dist", "worker.min.js.LICENSE.txt"),
+    "worker.min.js.LICENSE.txt",
+  ],
   ...[
     "tesseract-core-relaxedsimd-lstm.wasm.js",
     "tesseract-core-simd-lstm.wasm.js",

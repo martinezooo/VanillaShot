@@ -1,22 +1,33 @@
-## Skills
+## Rebuilding the installed app
 
-- `vulshot-release-update`: Build, install, codesign, and relaunch the macOS app after substantial changes. Skill path: `/Users/martinezooo/.codex/skills/vulshot-release-update/SKILL.md`
+After substantial changes, rebuild and reinstall `/Applications/VanillaShot.app`:
 
-  The skill text predates several renames (Vulshot -> AYE -> Vanilla Shoot -> VanillaShot). Where it says `Vulshot.app`, read `/Applications/VanillaShot.app`, and re-sign with the current identifier:
+```bash
+npm run install:local
+```
 
-  ```bash
-  npm run install:local
-  ```
+Use that script rather than signing by hand. It signs with a certificate from the
+keychain instead of ad-hoc, which is what keeps the Screen Recording grant alive:
+an ad-hoc signature carries no certificate, so the designated requirement degrades
+to the binary's cdhash and every rebuild reads as a different app, forcing you to
+re-grant the permission each time. Override the certificate with
+`VANILLASHOT_SIGN_IDENTITY`; the script otherwise picks the first Apple
+Development identity it finds.
 
-  Use that script rather than signing by hand. It signs with a certificate from the keychain instead of ad-hoc, which is what keeps the Screen Recording grant alive: an ad-hoc signature carries no certificate, so the designated requirement degrades to the binary's cdhash and every rebuild reads as a different app. Override the certificate with `VANILLASHOT_SIGN_IDENTITY`.
-
-  Signing with the skill's stale `com.vulshot` identifier would make macOS treat the app as a different one and reset its Screen Recording grant.
+Signing under any of the historical bundle identifiers (`com.vulshot`, and so on)
+would make macOS treat the result as a different app and reset its Screen
+Recording grant. Keep `com.hackjitsu.vanillashot`.
 
 ## Trigger Rules
 
-- Use `vulshot-release-update` after substantial changes in this repo, especially when they affect Tauri/Rust code, capture flow, OCR, permissions, shortcuts, tray behavior, packaging, assets, deep links, or any user-facing behavior that should be verified in `/Applications/VanillaShot.app`.
-- Use `vulshot-release-update` when the user asks to update, install, restart, rebuild, or verify the installed app.
-- Do not stop at `tauri dev` for major changes. Finish by validating and refreshing `/Applications/VanillaShot.app` unless the user explicitly says not to.
+- Reinstall after changes to Tauri/Rust code, the capture flow, OCR, permissions,
+  shortcuts, tray behaviour, packaging, assets, deep links, or any user-facing
+  behaviour that should be verified in `/Applications/VanillaShot.app`.
+- Reinstall when asked to update, install, restart, rebuild, or verify the
+  installed app.
+- Do not stop at `tauri dev` for major changes. `tauri dev` runs unsigned under a
+  different path, so it cannot confirm permission or packaging behaviour. Finish
+  by refreshing `/Applications/VanillaShot.app` unless told otherwise.
 
 ## Naming
 

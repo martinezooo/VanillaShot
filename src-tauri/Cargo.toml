@@ -1,10 +1,10 @@
 [package]
 name = "vanilla-shot"
-version = "0.1.22"
-description = "VanillaShot desktop shell"
+version = "0.2.0"
+description = "Local-first screenshot and screen-memory tool for macOS, focused on OCR-driven redaction."
 authors = ["martinezooo · hack-jitsu.com"]
-license = ""
-repository = ""
+license = "MIT"
+repository = "https://github.com/hack-jitsu/VanillaShot"
 edition = "2021"
 rust-version = "1.77.2"
 

@@ -1,6 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Oldest macOS the Swift helpers support. ScreenCaptureKit, which the recorder
+/// needs, is available from 12.3. Keep this in step with the `@available`
+/// annotations in `scripts/vanilla_shot_recorder.swift` and with
+/// `bundle.macOS.minimumSystemVersion` in `tauri.conf.json`.
+#[cfg(target_os = "macos")]
+const MIN_MACOS_VERSION: &str = "12.3";
+
 /// Compiles the Swift helpers at build time so the app ships pre-built,
 /// code-signed binaries instead of compiling executables into a user-writable
 /// folder at runtime. Also removes the end-user dependency on the Xcode
@@ -42,6 +49,16 @@ fn build_swift_helpers() {
 
         let mut cmd = Command::new("swiftc");
         cmd.arg("-O");
+        // Pin the deployment target. Without -target, swiftc stamps the build
+        // machine's OS version as the minimum, so helpers built on a new macOS
+        // refuse to launch on the older versions the sources actually support
+        // (`@available(macOS 12.3, *)` in vanilla_shot_recorder.swift, which is
+        // where ScreenCaptureKit lands).
+        let arch = match std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() {
+            Ok("x86_64") => "x86_64",
+            _ => "arm64",
+        };
+        cmd.args(["-target", &format!("{arch}-apple-macosx{MIN_MACOS_VERSION}")]);
         for framework in frameworks {
             cmd.args(["-framework", framework]);
         }

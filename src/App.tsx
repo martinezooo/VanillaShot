@@ -4271,8 +4271,8 @@ function App() {
             </div>
           </section>
           <p className="settings-footnote">
-            The repository is private, so the releases page opens in your browser where you are
-            already signed in. In-app updates arrive once releases are public.
+            Source and releases are on GitHub, and open in your browser. VanillaShot has no
+            in-app updater: it never calls out on its own.
           </p>
           <p className="settings-footnote">Capture, OCR and screen memory all run locally. Nothing is uploaded.</p>
         </main>

@@ -38,3 +38,16 @@ public/__test-fixture.png
 
 # Swift helpers compiled by build.rs and bundled as resources
 src-tauri/gen/helpers/
+
+# Local agent/editor settings, per-contributor
+.claude/
+.codex/skills/
+
+# Secrets and key material - never commit these
+.env
+.env.*
+*.p12
+*.pem
+*.key
+*.mobileprovision
+id_rsa*

@@ -1,8 +1,8 @@
 {
   "name": "vanilla-shot",
-  "author": "martinezooo \u00b7 hack-jitsu.com",
+  "author": "martinezooo · hack-jitsu.com",
   "private": true,
-  "version": "0.1.22",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -47,6 +47,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hack-jitsu/Repshot.git"
+    "url": "https://github.com/hack-jitsu/VanillaShot.git"
   }
 }

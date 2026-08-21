@@ -35,6 +35,11 @@ sed -i '' -E "s/\"version\": \"[0-9]+\.[0-9]+\.[0-9]+\"/\"version\": \"$NEW_VERS
 sed -i '' -E "s/\"version\": \"[0-9]+\.[0-9]+\.[0-9]+\"/\"version\": \"$NEW_VERSION\"/" src-tauri/tauri.conf.json
 sed -i '' -E "s/\"title\": \"${APP_NAME} v[0-9]+\.[0-9]+\.[0-9]+\"/\"title\": \"${APP_NAME} v$NEW_VERSION\"/" src-tauri/tauri.conf.json
 
+# Update Cargo.toml and the lockfile. Skipping these is how the crate version
+# silently drifted from the other two for fifteen commits.
+sed -i '' -E "1,/^\[dependencies\]/ s/^version = \"[0-9]+\.[0-9]+\.[0-9]+\"$/version = \"$NEW_VERSION\"/" src-tauri/Cargo.toml
+(cd src-tauri && cargo update -p vanilla-shot --quiet)
+
 echo "Building Tauri app..."
 npm run tauri build
 

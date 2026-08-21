@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # macOS runner: the Rust side compiles Swift helpers and links macOS
+    # frameworks, so it cannot build anywhere else.
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build frontend
+        # Also runs the tesseract vendoring step via prebuild.
+        run: npm run build
+
+      - name: Build Rust
+        run: cargo build --manifest-path src-tauri/Cargo.toml --locked
+
+      - name: Check the app makes no network requests
+        # The project claims to be local-first; keep that honest. Google Fonts
+        # crept in this way once already.
+        run: |
+          if grep -rqE 'fonts\.(googleapis|gstatic)\.com' dist/; then
+            echo "::error::A webfont CDN reference reached the build output."
+            exit 1
+          fi
