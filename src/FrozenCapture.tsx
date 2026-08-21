@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import './FrozenCapture.css'
+
+// The backend pushes each capture's frozen still on this event, so the overlay
+// window can be pre-warmed once and reused instead of rebuilt per capture.
+const FROZEN_PAYLOAD_EVENT = 'frozen://payload'
 
 /**
  * Frozen-screen region selector.
@@ -40,9 +45,36 @@ export default function FrozenCapture() {
   const draggingRef = useRef(false)
   const committedRef = useRef(false)
 
-  // Pull the frozen still the backend stashed for this overlay window.
+  // Show a fresh still: clear any leftover selection (the overlay window is
+  // reused warm across captures), then reveal the window once the image has
+  // actually decoded so the user never sees a blank or stale frame.
+  const applyPayload = useCallback((next: FrozenPayload) => {
+    setStart(null)
+    setCurrent(null)
+    setHover(null)
+    committedRef.current = false
+    setError(null)
+    setPayload(next)
+
+    // Reveal once the still has decoded. Note: no requestAnimationFrame here —
+    // the window is still hidden and rAF is paused while hidden, so gating the
+    // reveal on it would deadlock (the window can never show). decode() runs off
+    // the compositor and resolves while hidden. A timeout backstops a stuck decode.
+    let revealed = false
+    const reveal = () => {
+      if (revealed) return
+      revealed = true
+      void invoke('frozen_ready_to_show').catch(() => {})
+    }
+    const probe = new Image()
+    probe.src = next.imageDataUrl
+    void probe.decode().then(reveal).catch(reveal)
+    window.setTimeout(reveal, 250)
+  }, [])
+
   useEffect(() => {
     let cancelled = false
+    let unlisten: (() => void) | undefined
 
     const load = async () => {
       if (!isTauri()) {
@@ -64,14 +96,18 @@ export default function FrozenCapture() {
         return
       }
 
+      // Warm path: the backend pushes each capture's still as an event.
+      unlisten = await listen<FrozenPayload>(FROZEN_PAYLOAD_EVENT, (event) => {
+        if (!cancelled) {
+          applyPayload(event.payload)
+        }
+      })
+
+      // Cold path: a still already waiting when this window mounted.
       try {
         const result = await invoke<FrozenPayload | null>('take_pending_frozen_capture')
-        if (!cancelled) {
-          if (result) {
-            setPayload(result)
-          } else {
-            setError('No capture is pending.')
-          }
+        if (!cancelled && result) {
+          applyPayload(result)
         }
       } catch (err) {
         if (!cancelled) {
@@ -83,8 +119,9 @@ export default function FrozenCapture() {
     void load()
     return () => {
       cancelled = true
+      unlisten?.()
     }
-  }, [])
+  }, [applyPayload])
 
   const cancel = useCallback(async () => {
     if (committedRef.current) {

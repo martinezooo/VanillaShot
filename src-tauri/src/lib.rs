@@ -19,6 +19,7 @@ const CAPTURE_ERROR_EVENT: &str = "capture://error";
 const GLOBAL_SHORTCUT_ACCELERATORS: [&str; 2] = ["cmd+shift+1", "ctrl+shift+1"];
 const QUICK_EDITOR_WINDOW_LABEL: &str = "quick-editor";
 const CAPTURE_OVERLAY_WINDOW_LABEL: &str = "capture-overlay";
+const FROZEN_PAYLOAD_EVENT: &str = "frozen://payload";
 #[cfg(all(desktop, target_os = "macos"))]
 const TRAY_CAPTURE_MENU_ID: &str = "tray_capture_region";
 #[cfg(all(desktop, target_os = "macos"))]
@@ -662,14 +663,22 @@ fn start_frozen_capture(app_handle: tauri::AppHandle) {
             y: p.y,
         });
 
-        // Hide the app so it is never in the still.
-        if let Some(w) = app_handle.get_webview_window("main") {
-            let _ = w.hide();
+        // Hide any visible app window so it is never in the still. When the app
+        // is triggered from the tray with nothing on screen (the common case),
+        // there is nothing to hide and no need to wait for a hide to composite.
+        let mut hid_a_window = false;
+        for label in ["main", QUICK_EDITOR_WINDOW_LABEL] {
+            if let Some(w) = app_handle.get_webview_window(label) {
+                if w.is_visible().unwrap_or(false) {
+                    let _ = w.hide();
+                    hid_a_window = true;
+                }
+            }
         }
-        if let Some(w) = app_handle.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
-            let _ = w.hide();
+        if hid_a_window {
+            // Give the compositor a moment to drop the just-hidden window.
+            std::thread::sleep(Duration::from_millis(60));
         }
-        std::thread::sleep(Duration::from_millis(120));
 
         let bounds = monitor_logical_bounds(&app_handle, cursor.as_ref());
         let (mx, my, mw, mh, scale) = match bounds {
@@ -699,44 +708,84 @@ fn start_frozen_capture(app_handle: tauri::AppHandle) {
 
         if let Some(state) = app_handle.try_state::<PendingFrozenCaptureState>() {
             if let Ok(mut pending) = state.payload.lock() {
-                *pending = Some(payload);
+                *pending = Some(payload.clone());
             }
         }
 
-        // A borderless, always-on-top window filling the display, showing the
-        // still. Opaque so nothing behind bleeds through.
-        let mut builder = WebviewWindowBuilder::new(
-            &app_handle,
-            CAPTURE_OVERLAY_WINDOW_LABEL,
-            WebviewUrl::default(),
-        )
-        .title("VanillaShot Capture")
-        .inner_size(mw, mh)
-        .position(mx, my)
-        .resizable(false)
-        .decorations(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .focused(true)
-        .shadow(false);
-
-        builder = builder.visible_on_all_workspaces(true);
-
-        match builder.build() {
-            Ok(overlay) => {
-                let _ = overlay.show();
-                let _ = overlay.set_focus();
-                let _ = overlay.set_always_on_top(true);
-            }
-            Err(e) => {
-                show_main_window(&app_handle);
-                let _ = app_handle.emit(
-                    CAPTURE_ERROR_EVENT,
-                    CaptureError::failed(format!("Could not open the capture overlay: {e}")),
-                );
-            }
+        // Reuse the pre-warmed overlay when present so the hot path never pays
+        // for a webview boot; otherwise build one now. Either way the overlay
+        // stays hidden until its webview has painted the still and shows itself
+        // via frozen_ready_to_show, so the user never sees a blank flash.
+        if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
+            let _ = overlay.set_position(tauri::LogicalPosition::new(mx, my));
+            let _ = overlay.set_size(tauri::LogicalSize::new(mw, mh));
+            let _ = overlay.emit(FROZEN_PAYLOAD_EVENT, payload.clone());
+        } else if let Err(e) = build_frozen_overlay(&app_handle, mx, my, mw, mh) {
+            show_main_window(&app_handle);
+            let _ = app_handle.emit(
+                CAPTURE_ERROR_EVENT,
+                CaptureError::failed(format!("Could not open the capture overlay: {e}")),
+            );
         }
     });
+}
+
+/// Builds the frozen-capture overlay window, hidden. The webview shows it once
+/// it has painted the still (frozen_ready_to_show). Used both to pre-warm the
+/// overlay at startup and as the cold fallback if the warm one is gone.
+#[cfg(target_os = "macos")]
+fn build_frozen_overlay(
+    app_handle: &tauri::AppHandle,
+    mx: f64,
+    my: f64,
+    mw: f64,
+    mh: f64,
+) -> tauri::Result<()> {
+    let mut builder = WebviewWindowBuilder::new(
+        app_handle,
+        CAPTURE_OVERLAY_WINDOW_LABEL,
+        WebviewUrl::default(),
+    )
+    .title("VanillaShot Capture")
+    .inner_size(mw, mh)
+    .position(mx, my)
+    .resizable(false)
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .focused(false)
+    .visible(false)
+    .shadow(false);
+
+    builder = builder.visible_on_all_workspaces(true);
+    builder.build()?;
+    Ok(())
+}
+
+/// Pre-creates the overlay window (hidden) so the first capture is as fast as
+/// the rest. Safe to call when one already exists.
+#[cfg(target_os = "macos")]
+fn prewarm_frozen_overlay(app_handle: &tauri::AppHandle) {
+    if app_handle
+        .get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL)
+        .is_some()
+    {
+        return;
+    }
+    if let Ok((mx, my, mw, mh, _)) = monitor_logical_bounds(app_handle, None) {
+        let _ = build_frozen_overlay(app_handle, mx, my, mw, mh);
+    }
+}
+
+/// The overlay's webview has painted the still; reveal the (until now hidden)
+/// window. Called from FrozenCapture once the image has decoded.
+#[tauri::command]
+fn frozen_ready_to_show(app_handle: tauri::AppHandle) {
+    if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
+        let _ = overlay.show();
+        let _ = overlay.set_focus();
+        let _ = overlay.set_always_on_top(true);
+    }
 }
 
 #[tauri::command]
@@ -764,7 +813,7 @@ fn begin_capture(app_handle: tauri::AppHandle) {
 #[tauri::command]
 fn cancel_frozen_capture(app_handle: tauri::AppHandle) {
     if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
-        let _ = overlay.close();
+        let _ = overlay.hide();
     }
 }
 
@@ -776,7 +825,7 @@ fn finish_frozen_capture(
     cursor: Option<DesktopCursorPoint>,
 ) -> Result<(), CaptureError> {
     if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
-        let _ = overlay.close();
+        let _ = overlay.hide();
     }
     open_quick_capture_window(app_handle, state, data_url, cursor)
 }
@@ -1035,6 +1084,10 @@ pub fn run() {
                     let _ = main_window.set_skip_taskbar(true);
                 }
 
+                // Pre-warm the capture overlay (hidden) so the first frozen
+                // capture pays no webview boot on the hot path.
+                prewarm_frozen_overlay(app.handle());
+
                 let tray_menu = build_tray_menu(app.handle(), tray_memory_label(app.handle()))?;
 
                 // A monochrome template image, so the menu bar renders it in the bar's
@@ -1109,6 +1162,7 @@ pub fn run() {
             open_quick_capture_window,
             take_pending_quick_capture,
             take_pending_frozen_capture,
+            frozen_ready_to_show,
             finish_frozen_capture,
             cancel_frozen_capture,
             begin_capture,
