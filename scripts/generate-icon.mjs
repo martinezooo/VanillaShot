@@ -20,8 +20,8 @@ const AMBER = "#ffb23a";
 const AMBER_DEEP = "#e2890f";
 
 // Viewfinder frame — a large centred square of corner brackets.
-const FRAME = 276;        // distance from centre to each bracket corner
-const ARM = 138;          // bracket arm length
+const FRAME = 312;        // distance from centre to each bracket corner
+const ARM = 150;          // bracket arm length
 const STROKE = 40;
 
 const L = C - FRAME;

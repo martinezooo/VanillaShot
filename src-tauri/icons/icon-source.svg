@@ -18,10 +18,10 @@
   <rect width="1024" height="1024" rx="225.28" fill="url(#glow)"/>
 
   <g fill="none" stroke="#ffb23a" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 374 236 H 236 V 374" />
-    <path d="M 650 236 H 788 V 374" />
-    <path d="M 374 788 H 236 V 650" />
-    <path d="M 650 788 H 788 V 650" />
+    <path d="M 350 200 H 200 V 350" />
+    <path d="M 674 200 H 824 V 350" />
+    <path d="M 350 824 H 200 V 674" />
+    <path d="M 674 824 H 824 V 674" />
   </g>
 
   <g fill="url(#petal)" stroke="#100b07" stroke-width="7">
