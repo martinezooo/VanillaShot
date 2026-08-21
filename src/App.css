@@ -11,6 +11,15 @@
 }
 
 .app-shell.quick-mode {
+  /* Brand accent, tokenized so every control shares one warm amber instead of
+     each button hardcoding a slightly different gold/olive/tan. */
+  --vs-amber: #ffb23a;
+  --vs-amber-deep: #e2890f;
+  --vs-vanilla: #f2dfb0;
+  --vs-on-amber: #201a12;
+  --vs-glass-hi: rgba(255, 255, 255, 0.09);
+  --vs-glass-lo: rgba(255, 255, 255, 0.03);
+  --vs-glass-base: rgba(27, 25, 22, 0.42);
   padding: 0;
   min-height: 100vh;
   width: 100vw;
@@ -703,14 +712,12 @@
 
 .quick-tool-btn.active,
 .quick-tool-chip.active {
-  border-color: rgba(216, 193, 163, 0.52);
-  color: #fdfbf9;
-  background:
-    linear-gradient(180deg, rgba(224, 205, 182, 0.18), rgba(255, 255, 255, 0.02)),
-    linear-gradient(180deg, rgba(199, 167, 125, 0.94), rgba(179, 141, 92, 0.88));
+  border-color: rgba(255, 178, 58, 0.55);
+  color: var(--vs-on-amber);
+  background: linear-gradient(180deg, var(--vs-amber), var(--vs-amber-deep));
   box-shadow:
-    0 12px 24px -20px rgba(201, 170, 129, 0.82),
-    0 1px 0 rgba(255, 255, 255, 0.18) inset;
+    0 12px 24px -18px rgba(226, 137, 15, 0.85),
+    0 1px 0 rgba(255, 255, 255, 0.28) inset;
 }
 
 .quick-toolbar .quick-close {
@@ -849,69 +856,44 @@
   box-shadow: 0 0 0 1px rgba(239, 229, 217, 0.12) inset;
 }
 
-.quick-save {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03)),
-    rgba(27, 25, 22, 0.4);
-  color: #fbf9f6;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.07) inset;
-}
-
-.quick-report {
-  border-color: rgba(255, 218, 117, 0.44);
-  background:
-    linear-gradient(180deg, rgba(255, 221, 126, 0.98), rgba(198, 157, 45, 0.94)),
-    rgba(174, 138, 38, 0.9);
-  color: #1b1916;
-  box-shadow:
-    0 14px 28px -20px rgba(255, 211, 91, 0.8),
-    0 1px 0 rgba(255, 255, 255, 0.18) inset;
-}
-
-.quick-report.active {
-  box-shadow:
-    0 0 0 1px rgba(239, 229, 217, 0.18) inset,
-    0 20px 34px -24px rgba(196, 162, 118, 0.78);
-}
-
-.quick-memory {
-  border-color: rgba(202, 201, 156, 0.36);
-  background:
-    linear-gradient(180deg, rgba(138, 136, 78, 0.98), rgba(98, 96, 47, 0.92)),
-    rgba(88, 87, 40, 0.9);
-  color: #fdfcf6;
-  box-shadow:
-    0 14px 28px -20px rgba(129, 126, 61, 0.72),
-    0 1px 0 rgba(255, 255, 255, 0.16) inset;
-}
-
-.quick-memory.active {
-  border-color: rgba(245, 212, 136, 0.4);
-  background:
-    linear-gradient(180deg, rgba(231, 189, 92, 0.98), rgba(178, 139, 50, 0.92)),
-    rgba(164, 129, 46, 0.88);
-  box-shadow:
-    0 0 0 1px rgba(253, 244, 224, 0.16) inset,
-    0 20px 34px -24px rgba(242, 199, 97, 0.78);
-}
-
+.quick-save,
 .quick-copy {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03)),
-    rgba(27, 25, 22, 0.4);
+    linear-gradient(180deg, var(--vs-glass-hi), var(--vs-glass-lo)),
+    var(--vs-glass-base);
   color: #faf7f4;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.07) inset;
 }
 
-.quick-commit {
-  border-color: rgba(226, 224, 155, 0.28);
+/* Add note and Memory are secondary: neutral warm glass at rest. Memory turns
+   amber only while it is actually recording (.active). */
+.quick-report,
+.quick-memory {
   background:
-    linear-gradient(180deg, rgba(226, 224, 157, 0.14), rgba(255, 255, 255, 0.03)),
-    rgba(44, 43, 25, 0.5);
-  color: #fbfbf3;
+    linear-gradient(180deg, var(--vs-glass-hi), var(--vs-glass-lo)),
+    var(--vs-glass-base);
+  color: #faf7f4;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.07) inset;
+}
+
+.quick-memory.active {
+  border-color: rgba(255, 178, 58, 0.5);
+  background: linear-gradient(180deg, var(--vs-amber), var(--vs-amber-deep));
+  color: var(--vs-on-amber);
   box-shadow:
-    0 12px 22px -20px rgba(196, 162, 117, 0.48),
-    0 1px 0 rgba(255, 255, 255, 0.12) inset;
+    0 0 0 1px rgba(255, 255, 255, 0.22) inset,
+    0 16px 28px -22px rgba(226, 137, 15, 0.85);
+}
+
+/* Save + Copy is the primary action: the one bright amber button in the bar. */
+.quick-commit {
+  border-color: rgba(255, 178, 58, 0.55);
+  background: linear-gradient(180deg, var(--vs-amber), var(--vs-amber-deep));
+  color: var(--vs-on-amber);
+  font-weight: 680;
+  box-shadow:
+    0 14px 26px -18px rgba(226, 137, 15, 0.9),
+    0 1px 0 rgba(255, 255, 255, 0.28) inset;
 }
 
 .canvas-wrap.quick-overlay-space {
@@ -1369,27 +1351,24 @@
 }
 
 .report-composer .quick-report {
-  border-color: rgba(221, 202, 176, 0.42);
-  background:
-    linear-gradient(180deg, rgba(202, 171, 131, 0.98), rgba(180, 141, 91, 0.92)),
-    rgba(178, 144, 100, 0.88);
-  color: #fefefd;
+  border-color: rgba(255, 178, 58, 0.5);
+  background: linear-gradient(180deg, var(--vs-amber), var(--vs-amber-deep));
+  color: var(--vs-on-amber);
   box-shadow:
-    0 14px 28px -20px rgba(190, 154, 108, 0.86),
-    0 1px 0 rgba(255, 255, 255, 0.18) inset;
+    0 14px 28px -20px rgba(226, 137, 15, 0.86),
+    0 1px 0 rgba(255, 255, 255, 0.24) inset;
 }
 
 .report-composer .quick-report:hover {
-  border-color: rgba(230, 215, 196, 0.48);
-  background:
-    linear-gradient(180deg, rgba(207, 179, 143, 1), rgba(187, 149, 100, 0.94)),
-    rgba(178, 144, 100, 0.9);
+  filter: brightness(1.05);
 }
 
 .report-composer .quick-report:disabled {
   opacity: 0.56;
   box-shadow: none;
-}@media (max-width: 820px) {
+}
+
+@media (max-width: 820px) {
   .report-debug-list {
     grid-template-columns: 1fr;
   }
@@ -2254,7 +2233,7 @@
   --vs-text: #000000;
   --vs-secondary: rgba(0, 0, 0, 0.5);
   --vs-separator: rgba(0, 0, 0, 0.09);
-  --vs-accent: #007aff;
+  --vs-accent: #e2890f;   /* brand amber, warm to match the app */
   --vs-button: #ffffff;
   --vs-button-border: rgba(0, 0, 0, 0.14);
   --vs-switch-off: rgba(0, 0, 0, 0.16);
@@ -2279,7 +2258,7 @@
     --vs-text: #ffffff;
     --vs-secondary: rgba(255, 255, 255, 0.55);
     --vs-separator: rgba(255, 255, 255, 0.1);
-    --vs-accent: #0a84ff;
+    --vs-accent: #ffb23a;
     --vs-button: #48484a;
     --vs-button-border: rgba(255, 255, 255, 0.12);
     --vs-switch-off: rgba(255, 255, 255, 0.18);
@@ -2361,7 +2340,7 @@
   border-radius: 6px;
   padding: 7px 10px;
   font-size: 11px;
-  background: rgba(0, 122, 255, 0.12);
+  background: rgba(226, 137, 15, 0.12);
   color: var(--vs-text);
 }
 
@@ -2451,7 +2430,7 @@
 }
 
 .settings-switch:focus-visible {
-  outline: 3px solid rgba(0, 122, 255, 0.4);
+  outline: 3px solid rgba(226, 137, 15, 0.45);
   outline-offset: 1px;
 }
 

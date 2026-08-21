@@ -1,30 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#241d14"/>
-      <stop offset="100%" stop-color="#0f0c08"/>
+      <stop offset="0%" stop-color="#2a2118"/>
+      <stop offset="100%" stop-color="#0f0b07"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="46%" r="52%">
+      <stop offset="0%" stop-color="#ffb23a" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#ffb23a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="petal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fbeecb"/>
+      <stop offset="100%" stop-color="#eccf90"/>
     </linearGradient>
   </defs>
 
   <rect width="1024" height="1024" rx="225.28" fill="url(#tile)"/>
+  <rect width="1024" height="1024" rx="225.28" fill="url(#glow)"/>
 
-  <g fill="none" stroke="#ffab2e" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 310 172 H 214 V 268" />
-    <path d="M 714 172 H 810 V 268" />
-    <path d="M 310 636 H 214 V 540" />
-    <path d="M 714 636 H 810 V 540" />
+  <g fill="none" stroke="#ffb23a" stroke-width="33" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 396 264 H 264 V 396" />
+    <path d="M 628 264 H 760 V 396" />
+    <path d="M 396 760 H 264 V 628" />
+    <path d="M 628 760 H 760 V 628" />
   </g>
 
-  <g fill="#f2dfb0">
-      <g transform="rotate(-90 512 398)"><ellipse cx="512" cy="310" rx="53" ry="99"/></g>
-      <g transform="rotate(-18 512 398)"><ellipse cx="512" cy="310" rx="53" ry="99"/></g>
-      <g transform="rotate(54 512 398)"><ellipse cx="512" cy="310" rx="53" ry="99"/></g>
-      <g transform="rotate(126 512 398)"><ellipse cx="512" cy="310" rx="53" ry="99"/></g>
-      <g transform="rotate(198 512 398)"><ellipse cx="512" cy="310" rx="53" ry="99"/></g>
+  <g fill="url(#petal)" stroke="#100b07" stroke-width="7">
+      <g transform="rotate(-90 512 512)"><ellipse cx="512" cy="394" rx="68" ry="138"/></g>
+      <g transform="rotate(-18 512 512)"><ellipse cx="512" cy="394" rx="68" ry="138"/></g>
+      <g transform="rotate(54 512 512)"><ellipse cx="512" cy="394" rx="68" ry="138"/></g>
+      <g transform="rotate(126 512 512)"><ellipse cx="512" cy="394" rx="68" ry="138"/></g>
+      <g transform="rotate(198 512 512)"><ellipse cx="512" cy="394" rx="68" ry="138"/></g>
   </g>
-  <circle cx="512" cy="398" r="39" fill="#ffab2e"/>
-
-  <text x="512" y="812" text-anchor="middle"
-        font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
-        font-size="104" font-weight="600" letter-spacing="1" fill="#f2dfb0">VanillaShot</text>
+  <circle cx="512" cy="512" r="52" fill="#ffb23a" stroke="#e2890f" stroke-width="6"/>
 </svg>
