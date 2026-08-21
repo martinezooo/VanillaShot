@@ -40,7 +40,7 @@ import {
   type DesktopCursorPoint,
 } from './lib/capture'
 import { scanCodesFromImage, type CodeRect, type DetectedCode } from './lib/codes'
-import { isSensitiveToken } from './lib/sensitive'
+import { flagLineTokens } from './lib/sensitive'
 import {
   getMemoryFrame,
   openMemoryPathInFinder,
@@ -228,10 +228,16 @@ const MEMORY_CORNER_HUD_WIDTH = 336
 const MEMORY_CORNER_HUD_HEIGHT = 96
 const MEMORY_CORNER_HUD_SUMMARY_HEIGHT = 128
 const MEMORY_CORNER_HUD_MARGIN = 18
-const QUICK_AUTO_ZOOM_MIN_TRIGGER = 1.08
+const QUICK_AUTO_ZOOM_DEADBAND = 0.06
 const QUICK_AUTO_ZOOM_MAX = 2.2
-const QUICK_AUTO_ZOOM_TARGET_WIDTH_RATIO = 0.62
-const QUICK_AUTO_ZOOM_TARGET_HEIGHT_RATIO = 0.58
+const QUICK_AUTO_ZOOM_TARGET_WIDTH_RATIO = 0.9
+const QUICK_AUTO_ZOOM_TARGET_HEIGHT_RATIO = 0.92
+// Matches the padding of .canvas-wrap.quick-overlay-space plus the floating
+// code panel on the right.
+const QUICK_VIEW_HORIZONTAL_RESERVE = 64
+const QUICK_VIEW_VERTICAL_RESERVE = 150
+// Width of the floating code panel plus its margin, reserved once codes exist.
+const QUICK_CODES_PANEL_RESERVE = 366
 const QUICK_ACCENT_SWATCHES = ['#ff2b2b', '#ff7a29', '#ffd049', '#17c67b', '#4ea8ff', '#f8fafc'] as const
 const MEMORY_TIMELINE_WINDOW_HOURS = 6
 const MEMORY_TIMELINE_LIMIT = 14
@@ -288,22 +294,24 @@ const bboxToRect = (bbox: Bbox) => ({
 const isRectTool = (tool: Tool): tool is RectAnnotationType =>
   tool === 'blur' || tool === 'blackout' || tool === 'highlight' || tool === 'pixelate' || tool === 'border'
 
-const collectWordsFromBlocks = (blocks: Block[] | null): Word[] => {
+const collectWordLinesFromBlocks = (blocks: Block[] | null): Word[][] => {
   if (!blocks) {
     return []
   }
 
-  const words: Word[] = []
+  const lines: Word[][] = []
 
   for (const block of blocks) {
     for (const paragraph of block.paragraphs) {
       for (const line of paragraph.lines) {
-        words.push(...line.words)
+        if (line.words.length > 0) {
+          lines.push(line.words)
+        }
       }
     }
   }
 
-  return words
+  return lines
 }
 
 const toDataUrl = async (blob: Blob): Promise<string> =>
@@ -437,7 +445,11 @@ const idleReportDebugState = (detail: string): ReportDebugState => ({
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
-const getSuggestedQuickZoom = (image: HTMLImageElement | null, monitorScale: number): number => {
+const getSuggestedQuickZoom = (
+  image: HTMLImageElement | null,
+  monitorScale: number,
+  extraHorizontalReserve = 0,
+): number => {
   if (!image) {
     return 1
   }
@@ -450,17 +462,25 @@ const getSuggestedQuickZoom = (image: HTMLImageElement | null, monitorScale: num
     return 1
   }
 
-  const availableWidth = Math.max(360, window.innerWidth - 160)
-  const availableHeight = Math.max(240, window.innerHeight - 240)
+  // The top toolbar and the bottom action bar are the only fixed occupants;
+  // everything between them belongs to the capture.
+  const availableWidth = Math.max(360, window.innerWidth - QUICK_VIEW_HORIZONTAL_RESERVE - extraHorizontalReserve)
+  const availableHeight = Math.max(240, window.innerHeight - QUICK_VIEW_VERTICAL_RESERVE)
   const targetWidth = availableWidth * QUICK_AUTO_ZOOM_TARGET_WIDTH_RATIO
   const targetHeight = availableHeight * QUICK_AUTO_ZOOM_TARGET_HEIGHT_RATIO
   const suggestedZoom = Math.min(targetWidth / logicalWidth, targetHeight / logicalHeight)
 
-  if (!Number.isFinite(suggestedZoom) || suggestedZoom < QUICK_AUTO_ZOOM_MIN_TRIGGER) {
+  if (!Number.isFinite(suggestedZoom)) {
     return 1
   }
 
-  return clamp(suggestedZoom, 1, QUICK_AUTO_ZOOM_MAX)
+  // Leave a capture that already fits at a sensible size alone; scale small
+  // ones up so they are readable, and large ones down so they are visible.
+  if (Math.abs(suggestedZoom - 1) < QUICK_AUTO_ZOOM_DEADBAND) {
+    return 1
+  }
+
+  return clamp(suggestedZoom, MIN_ZOOM, QUICK_AUTO_ZOOM_MAX)
 }
 
 const hexToRgba = (hex: string, alpha: number): string => {
@@ -2347,10 +2367,16 @@ function App() {
   }, [])
 
   const drawOcrOverlay = useCallback((ctx: CanvasRenderingContext2D) => {
+    // Only flagged words are outlined. Boxing every recognised word buried
+    // the ones that matter under a grid of rectangles.
     for (const word of ocrWords) {
+      if (!word.sensitive) {
+        continue
+      }
+
       ctx.save()
-      ctx.strokeStyle = word.sensitive ? 'rgba(211, 65, 39, 0.95)' : 'rgba(35, 115, 205, 0.7)'
-      ctx.fillStyle = word.sensitive ? 'rgba(211, 65, 39, 0.14)' : 'rgba(35, 115, 205, 0.1)'
+      ctx.strokeStyle = 'rgba(211, 65, 39, 0.95)'
+      ctx.fillStyle = 'rgba(211, 65, 39, 0.16)'
       ctx.lineWidth = 1.5
       ctx.fillRect(word.x, word.y, word.width, word.height)
       ctx.strokeRect(word.x, word.y, word.width, word.height)
@@ -2962,27 +2988,33 @@ function App() {
       const result = await worker.recognize(imageSource, {}, { text: true, blocks: true })
       await worker.terminate()
 
-      const recognizedWords = collectWordsFromBlocks(result.data.blocks)
-      const words: OcrWord[] = recognizedWords
-        .map((word, index) => {
+      const recognizedLines = collectWordLinesFromBlocks(result.data.blocks)
+      const words: OcrWord[] = []
+      let wordIndex = 0
+      for (const line of recognizedLines) {
+        const flags = flagLineTokens(line.map((word) => word.text))
+        line.forEach((word, positionInLine) => {
           const rect = bboxToRect(word.bbox)
-
-          return {
-            id: `${index}-${word.text}-${word.bbox.x0}-${word.bbox.y0}`,
+          words.push({
+            id: `${wordIndex}-${word.text}-${word.bbox.x0}-${word.bbox.y0}`,
             text: word.text,
             confidence: word.confidence,
             x: rect.x,
             y: rect.y,
             width: rect.width,
             height: rect.height,
-            sensitive: isSensitiveToken(word.text),
-          }
+            sensitive: flags[positionInLine],
+          })
+          wordIndex += 1
         })
-        .filter((word) => word.text.trim().length > 0 && word.width > 0 && word.height > 0)
+      }
+      const filteredWords = words.filter(
+        (word) => word.text.trim().length > 0 && word.width > 0 && word.height > 0,
+      )
 
-      setOcrWords(words)
+      setOcrWords(filteredWords)
       setOcrText(result.data.text.trim())
-      setOcrStatus(`OCR done (${words.length} words)`)
+      setOcrStatus(`OCR done (${filteredWords.length} words)`)
       setOcrProgress(1)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'OCR failed'
@@ -3018,6 +3050,12 @@ function App() {
       const codes = await scanCodesFromImage(baseImage)
       setDetectedCodes(codes)
       setRevealedCodeIds([])
+
+      if (codes.length > 0 && quickEditorOpen) {
+        setZoomLevel(
+          getSuggestedQuickZoom(baseImage, quickMonitorScale || window.devicePixelRatio || 1, QUICK_CODES_PANEL_RESERVE),
+        )
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Barcode scan failed'
       setDetectedCodes([])
@@ -3025,7 +3063,7 @@ function App() {
     } finally {
       setCodeScanRunning(false)
     }
-  }, [baseImage])
+  }, [baseImage, quickEditorOpen, quickMonitorScale])
 
   // Runs independently of OCR: the WASM decoder is much faster than Tesseract,
   // so codes surface while text recognition is still working.
@@ -3462,8 +3500,14 @@ function App() {
   }, [])
 
   const handleZoomReset = useCallback(() => {
-    setZoomLevel(getSuggestedQuickZoom(baseImage, quickMonitorScale || window.devicePixelRatio || 1))
-  }, [baseImage, quickMonitorScale])
+    setZoomLevel(
+      getSuggestedQuickZoom(
+        baseImage,
+        quickMonitorScale || window.devicePixelRatio || 1,
+        detectedCodes.length > 0 ? QUICK_CODES_PANEL_RESERVE : 0,
+      ),
+    )
+  }, [baseImage, detectedCodes.length, quickMonitorScale])
 
   const stopReportCapture = useCallback(async (preserveAudio = true): Promise<Blob | null> => {
     reportRecognitionRef.current?.stop()
@@ -3507,15 +3551,9 @@ function App() {
       setReportAudioBlob(null)
       reportAudioBlobRef.current = null
       setReportSubmitting(false)
-      setReportStatus('Preparing note tools...')
-      setReportSpeechState({
-        detail: 'Connecting voice preview...',
-        tone: 'working',
-      })
-      setReportMicState({
-        detail: 'Requesting microphone access...',
-        tone: 'working',
-      })
+      setReportStatus('Type your note, or press Dictate to speak it.')
+      setReportSpeechState(idleReportDebugState('Not started'))
+      setReportMicState(idleReportDebugState('Not started'))
       setReportPayloadState(idleReportDebugState('Waiting for note text'))
       setReportApiState(idleReportDebugState(`Ready: ${NOTE_STORAGE_LABEL}`))
       setErrorMessage('')
@@ -3526,6 +3564,19 @@ function App() {
       })
     })
     await stopReportCapture(false)
+  }, [reportCommittedText, stopReportCapture])
+
+  const startReportDictation = useCallback(async () => {
+    quickBlurGuardUntilRef.current = Date.now() + 8000
+    setReportStatus('Starting dictation...')
+    setReportSpeechState({
+      detail: 'Connecting voice preview...',
+      tone: 'working',
+    })
+    setReportMicState({
+      detail: 'Requesting microphone access...',
+      tone: 'working',
+    })
 
     const speechCtor = (
       window as Window & {
@@ -3650,7 +3701,7 @@ function App() {
     }
 
     setReportStatus('Mic unavailable. Type below to attach a note to this screenshot.')
-  }, [reportCommittedText, stopReportCapture])
+  }, [])
 
   const handleReportPrimaryEnter = useCallback(async () => {
     const nextText = reportDraft.trim()
@@ -4031,7 +4082,7 @@ function App() {
     ? 'Stop'
     : memoryCountdownValue !== null
       ? `Starting ${memoryCountdownValue}…`
-      : 'Record'
+      : 'Memory'
   const quickMemoryBannerText = memoryStatus?.recording
     ? `Recording memory for ${formatElapsedTimer(memoryRecordingElapsedSecs)}. Stop here or from the menu bar > Stop Memory.`
     : 'Start continuous local memory capture from this bar or from the menu bar.'
@@ -4231,7 +4282,71 @@ function App() {
 
             {baseImage && (
               <>
-                <div className={`canvas-wrap quick-overlay-space ${isSavingAnimation ? 'canvas-fly-out' : ''}`}>
+                <div
+                  className={`canvas-wrap quick-overlay-space ${isSavingAnimation ? 'canvas-fly-out' : ''} ${
+                    detectedCodes.length > 0 || codeScanError ? 'has-codes' : ''
+                  }`}
+                >
+            {(detectedCodes.length > 0 || codeScanError) && (
+              <div className="quick-inline-panel quick-inline-panel-codes quick-codes-float">
+                <div className="quick-inline-panel-head">
+                  <strong>QR &amp; barcodes</strong>
+                  <span>
+                    {codeScanError
+                      ? codeScanError
+                      : `${detectedCodes.length} decoded${
+                          sensitiveCodeCount > 0 ? ` - ${sensitiveCodeCount} worth masking` : ''
+                        }`}
+                  </span>
+                </div>
+                <ul className="quick-code-list">
+                  {detectedCodes.map((code) => {
+                    const revealed = code.severity !== 'critical' || revealedCodeIds.includes(code.id)
+
+                    return (
+                      <li key={code.id} className={`quick-code-item severity-${code.severity}`}>
+                        <div className="quick-code-meta">
+                          <span className="quick-code-format">{code.format}</span>
+                          <span className="quick-code-severity">{CODE_SEVERITY_LABEL[code.severity]}</span>
+                          <span className="quick-code-reason">{code.reason}</span>
+                        </div>
+                        <p className="quick-code-payload" title={revealed ? code.text : undefined}>
+                          {revealed ? truncatePayload(code.text) : 'Hidden - contains secret material'}
+                        </p>
+                        <div className="quick-code-actions">
+                          {code.severity === 'critical' && (
+                            <button
+                              className="button ghost mini"
+                              onClick={() => handleToggleCodeReveal(code.id)}
+                              type="button"
+                            >
+                              {revealed ? 'Hide' : 'Reveal'}
+                            </button>
+                          )}
+                          <button
+                            className="button ghost mini"
+                            onClick={() => void handleCopyCodeText(code)}
+                            type="button"
+                          >
+                            Copy payload
+                          </button>
+                          <button className="button ghost mini" onClick={() => maskCodes([code])} type="button">
+                            Mask
+                          </button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {sensitiveCodeCount > 0 && (
+                  <div className="quick-inline-panel-actions">
+                    <button className="button ghost mini" onClick={handleMaskAllSensitiveCodes} type="button">
+                      Mask all sensitive ({sensitiveCodeCount})
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
                   <div className="canvas-scale">
                     <canvas
                       ref={canvasRef}
@@ -4320,6 +4435,15 @@ function App() {
                   rows={6}
                 />
                 <div className="report-composer-actions">
+                  <button
+                    className={`quick-action ${reportRecording ? 'quick-report active' : ''}`}
+                    onClick={() => void (reportRecording ? stopReportCapture(true) : startReportDictation())}
+                    type="button"
+                    title={reportRecording ? 'Stop the microphone' : 'Dictate the note with the microphone'}
+                  >
+                    <Mic size={13} />
+                    {reportRecording ? 'Stop dictation' : 'Dictate'}
+                  </button>
                   <button className="quick-action quick-report" onClick={() => void handleReportPrimaryEnter()} type="button">
                     <Check size={13} />
                     Review note
@@ -4617,66 +4741,6 @@ function App() {
                   </div>
                 </div>
               )}
-              {(detectedCodes.length > 0 || codeScanError) && (
-                <div className="quick-inline-panel quick-inline-panel-codes">
-                  <div className="quick-inline-panel-head">
-                    <strong>Codes</strong>
-                    <span>
-                      {codeScanError
-                        ? codeScanError
-                        : `${detectedCodes.length} decoded${
-                            sensitiveCodeCount > 0 ? ` - ${sensitiveCodeCount} worth masking` : ''
-                          }`}
-                    </span>
-                  </div>
-                  <ul className="quick-code-list">
-                    {detectedCodes.map((code) => {
-                      const revealed = code.severity !== 'critical' || revealedCodeIds.includes(code.id)
-
-                      return (
-                        <li key={code.id} className={`quick-code-item severity-${code.severity}`}>
-                          <div className="quick-code-meta">
-                            <span className="quick-code-format">{code.format}</span>
-                            <span className="quick-code-severity">{CODE_SEVERITY_LABEL[code.severity]}</span>
-                            <span className="quick-code-reason">{code.reason}</span>
-                          </div>
-                          <p className="quick-code-payload" title={revealed ? code.text : undefined}>
-                            {revealed ? truncatePayload(code.text) : 'Hidden - contains secret material'}
-                          </p>
-                          <div className="quick-code-actions">
-                            {code.severity === 'critical' && (
-                              <button
-                                className="button ghost mini"
-                                onClick={() => handleToggleCodeReveal(code.id)}
-                                type="button"
-                              >
-                                {revealed ? 'Hide' : 'Reveal'}
-                              </button>
-                            )}
-                            <button
-                              className="button ghost mini"
-                              onClick={() => void handleCopyCodeText(code)}
-                              type="button"
-                            >
-                              Copy payload
-                            </button>
-                            <button className="button ghost mini" onClick={() => maskCodes([code])} type="button">
-                              Mask
-                            </button>
-                          </div>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                  {sensitiveCodeCount > 0 && (
-                    <div className="quick-inline-panel-actions">
-                      <button className="button ghost mini" onClick={handleMaskAllSensitiveCodes} type="button">
-                        Mask all sensitive ({sensitiveCodeCount})
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
               {sensitiveOcrWords.length > 0 && (
                 <button
                   className="quick-action quick-mask"
@@ -4703,7 +4767,7 @@ function App() {
                 className={`quick-action quick-memory ${memoryStatus?.recording ? 'active' : ''}`}
                 onClick={() => void handleQuickMemoryToggle()}
                 type="button"
-                title={memoryStatus?.recording ? 'Stop background memory recording' : 'Start background memory recording'}
+                title={memoryStatus?.recording ? 'Stop screen memory (background recording)' : 'Start screen memory: record the screen in the background for later search'}
                 disabled={memoryActionLoading || memoryCountdownValue !== null}
               >
                 {memoryStatus?.recording ? <Square size={13} /> : <Play size={13} />}
@@ -4775,7 +4839,7 @@ function App() {
         </div>
       )}
 
-      {quickEditorOpen && (
+      {quickEditorOpen && galleryThumbs.length > 0 && (
         <div className="memory-gallery-sidebar" role="complementary" aria-label="Memory gallery">
           <div className="memory-gallery-head">
             <Film size={11} />
