@@ -17,11 +17,11 @@
   <rect width="1024" height="1024" rx="225.28" fill="url(#tile)"/>
   <rect width="1024" height="1024" rx="225.28" fill="url(#glow)"/>
 
-  <g fill="none" stroke="#ffb23a" stroke-width="33" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 396 264 H 264 V 396" />
-    <path d="M 628 264 H 760 V 396" />
-    <path d="M 396 760 H 264 V 628" />
-    <path d="M 628 760 H 760 V 628" />
+  <g fill="none" stroke="#ffb23a" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 374 236 H 236 V 374" />
+    <path d="M 650 236 H 788 V 374" />
+    <path d="M 374 788 H 236 V 650" />
+    <path d="M 650 788 H 788 V 650" />
   </g>
 
   <g fill="url(#petal)" stroke="#100b07" stroke-width="7">

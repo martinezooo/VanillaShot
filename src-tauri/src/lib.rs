@@ -797,13 +797,20 @@ pub fn run() {
 
                 let tray_menu = build_tray_menu(app.handle(), tray_memory_label(app.handle()))?;
 
-                let tray_icon = app
-                    .default_window_icon()
-                    .cloned()
-                    .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?;
+                // A monochrome template image, so the menu bar renders it in the bar's
+                // own colour (black on light, white on dark) like every native
+                // status item - not the colourful app icon.
+                let tray_rgba = image::load_from_memory(include_bytes!(
+                    "../icons/tray-template.png"
+                ))
+                .map_err(|e| tauri::Error::AssetNotFound(format!("tray icon: {e}")))?
+                .to_rgba8();
+                let (tray_w, tray_h) = tray_rgba.dimensions();
+                let tray_icon = tauri::image::Image::new_owned(tray_rgba.into_raw(), tray_w, tray_h);
 
                 let _ = TrayIconBuilder::with_id("vanilla-shot-menubar")
                     .icon(tray_icon)
+                    .icon_as_template(true)
                     .tooltip("VanillaShot")
                     .menu(&tray_menu)
                     .show_menu_on_left_click(true)
