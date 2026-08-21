@@ -119,8 +119,6 @@ export const startMemoryRecording = async (): Promise<string> => invokeMemory('m
 
 export const stopMemoryRecording = async (): Promise<string> => invokeMemory('memory_stop')
 
-export const searchMemory = async (query: string, limit = 20): Promise<MemoryFrame[]> =>
-  invokeMemory('memory_search', { query, limit })
 
 export const getMemoryTimeline = async (
   start: string,
