@@ -1,4 +1,4 @@
-import { Action, ActionPanel, Icon, List } from "@raycast/api";
+import { Action, ActionPanel, Icon, List, Keyboard } from "@raycast/api";
 import { useSQL } from "@raycast/utils";
 import { useEffect, useMemo, useState } from "react";
 
@@ -59,9 +59,7 @@ const buildLikeQuery = (searchText: string): string | null => {
     return null;
   }
 
-  const conditions = tokens
-    .map((token) => `ocr_text LIKE '%${token}%' ESCAPE '\\'`)
-    .join(" AND ");
+  const conditions = tokens.map((token) => `ocr_text LIKE '%${token}%' ESCAPE '\\'`).join(" AND ");
 
   return `
     SELECT id, timestamp, frame_path AS framePath, ocr_text AS ocrText,
@@ -170,7 +168,7 @@ const FrameList = ({ databasePath }: { databasePath: string }) => {
               <Action.CopyToClipboard
                 title="Copy OCR Text"
                 content={frame.ocrText ?? ""}
-                shortcut={{ modifiers: ["cmd"], key: "." }}
+                shortcut={Keyboard.Shortcut.Common.Pin}
               />
               <Action
                 title="Capture Region"
