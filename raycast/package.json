@@ -4,7 +4,7 @@
   "title": "VanillaShot",
   "description": "Capture a redactable region and search your local VanillaShot screen memory.",
   "icon": "command-icon.png",
-  "author": "hackjitsu",
+  "author": "martinezo",
   "categories": [
     "Developer Tools",
     "Productivity"

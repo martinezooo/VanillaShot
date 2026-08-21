@@ -916,6 +916,48 @@
 }
 
 /* Decoded codes float beside the capture instead of inflating the bottom bar. */
+
+/* OCR text panel — floats top-left of the canvas, mirroring the codes panel. */
+.quick-inline-panel.quick-ocr-float {
+  position: absolute;
+  top: 72px;
+  left: 14px;
+  width: min(300px, calc(100vw - 28px));
+  z-index: 30;
+  gap: 0.5rem;
+}
+
+.quick-inline-panel.quick-ocr-float.pending {
+  border-color: rgba(255, 178, 58, 0.3);
+}
+
+.quick-ocr-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.quick-ocr-title {
+  color: #fbf9f6;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.quick-ocr-hint {
+  color: #a49c91;
+  font-size: 0.64rem;
+  white-space: nowrap;
+}
+
+.quick-ocr-actions {
+  display: flex;
+  gap: 0.36rem;
+  justify-content: flex-end;
+}
+
 .quick-inline-panel.quick-codes-float {
   position: absolute;
   top: 72px;

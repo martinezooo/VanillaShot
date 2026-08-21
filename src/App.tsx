@@ -4347,6 +4347,47 @@ function App() {
                 )}
               </div>
             )}
+            {showOcrDock && (
+              <div className={`quick-inline-panel quick-inline-panel-ocr quick-ocr-float ${ocrDockPending ? 'pending' : ''}`}>
+                <div className="quick-ocr-head">
+                  <span className="quick-ocr-title">OCR text</span>
+                  <span className="quick-ocr-hint">
+                    {ocrDockPending
+                      ? 'Recognizing…'
+                      : ocrSelectionResult
+                        ? 'Review or copy'
+                        : 'Drag a box on the screenshot'}
+                  </span>
+                </div>
+                <textarea
+                  className="quick-inline-textarea"
+                  value={ocrDockText}
+                  onChange={(event) => {
+                    setOcrSelectionResult((current) => (current ? { ...current, text: event.target.value } : current))
+                  }}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  placeholder="Selected text appears here."
+                  readOnly={!ocrSelectionResult || ocrDockPending}
+                  rows={4}
+                />
+                <div className="quick-ocr-actions">
+                  <button
+                    className="button ghost mini"
+                    onClick={() => void handleCopyOcrSelectionText()}
+                    type="button"
+                    disabled={!ocrDockText.trim() || ocrDockPending}
+                  >
+                    <Copy size={12} />
+                    Copy
+                  </button>
+                  {ocrSelectionResult && (
+                    <button className="button ghost mini" onClick={() => setOcrSelectionResult(null)} type="button">
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
                   <div className="canvas-scale">
                     <canvas
                       ref={canvasRef}
@@ -4692,55 +4733,6 @@ function App() {
             </div>
             <div className="quick-bar-group quick-bar-group-share">
               <span className="quick-toolbar-meta">{quickShareStatus}</span>
-              {showOcrDock && (
-                <div className={`quick-inline-panel quick-inline-panel-ocr ${ocrDockPending ? 'pending' : ''}`}>
-                  <div className="quick-inline-panel-head">
-                    <strong>OCR</strong>
-                    <span>
-                      {ocrDockPending
-                        ? 'Recognizing your selection...'
-                        : ocrSelectionResult
-                          ? 'Review or copy the extracted text.'
-                          : 'Draw a box on the screenshot to extract text.'}
-                    </span>
-                  </div>
-                  <textarea
-                    className="quick-inline-textarea"
-                    value={ocrDockText}
-                    onChange={(event) => {
-                      setOcrSelectionResult((current) => {
-                        if (!current) {
-                          return current
-                        }
-
-                        return {
-                          ...current,
-                          text: event.target.value,
-                        }
-                      })
-                    }}
-                    onKeyDown={(event) => event.stopPropagation()}
-                    placeholder="OCR text will appear here after you drag a selection."
-                    readOnly={!ocrSelectionResult || ocrDockPending}
-                    rows={3}
-                  />
-                  <div className="quick-inline-panel-actions">
-                    <button
-                      className="button ghost mini"
-                      onClick={() => void handleCopyOcrSelectionText()}
-                      type="button"
-                      disabled={!ocrDockText.trim() || ocrDockPending}
-                    >
-                      Copy text
-                    </button>
-                    {ocrSelectionResult && (
-                      <button className="button ghost mini" onClick={() => setOcrSelectionResult(null)} type="button">
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
               {sensitiveOcrWords.length > 0 && (
                 <button
                   className="quick-action quick-mask"
