@@ -20,6 +20,21 @@ Do not sign under any of the old bundle identifiers such as `com.vulshot`. macOS
 would treat the result as a different app and reset its Screen Recording grant.
 Keep `com.hackjitsu.vanillashot`.
 
+## Signing the build
+
+`tauri.conf.json` sets `bundle.macOS.signingIdentity` to `-`, so `npm run
+tauri:build` signs the bundle ad-hoc. Without it, Tauri ships whatever the
+linker produced: no `_CodeSignature` directory, `Sealed Resources=none`, and a
+bundle that `codesign -v --strict` rejects as broken. That build runs on the
+machine that made it and fails for anyone who downloads it.
+
+Ad-hoc signing also turns on the hardened runtime, which is what notarisation
+will need later. The Swift helpers are signed as part of the bundle.
+
+To sign with a real certificate instead, set `APPLE_SIGNING_IDENTITY` before
+building. `npm run install:local` does its own signing pass on top, because a
+keychain certificate is what keeps the Screen Recording grant across rebuilds.
+
 ## When to reinstall
 
 `npm run tauri:dev` runs unsigned from a different path, so it cannot confirm
