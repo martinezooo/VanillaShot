@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "Local-first screenshot and screen-memory tool for macOS, focused on OCR-driven redaction."
 authors = ["martinezooo · hack-jitsu.com"]
 license = "MIT"
-repository = "https://github.com/hack-jitsu/VanillaShot"
+repository = "https://github.com/martinezooo/VanillaShot"
 edition = "2021"
 rust-version = "1.77.2"
 

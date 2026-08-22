@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security issues privately through GitHub's
-[private vulnerability reporting](https://github.com/hack-jitsu/VanillaShot/security/advisories/new)
+[private vulnerability reporting](https://github.com/martinezooo/VanillaShot/security/advisories/new)
 rather than opening a public issue.
 
 Include what you did, what happened, and what you expected. A proof of concept

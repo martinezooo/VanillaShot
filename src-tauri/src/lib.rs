@@ -176,7 +176,7 @@ fn capture_output_dir() -> String {
 /// page a way to launch external handlers.
 #[tauri::command]
 fn open_project_page() -> Result<(), CaptureError> {
-    const PROJECT_URL: &str = "https://github.com/hack-jitsu/Repshot";
+    const PROJECT_URL: &str = "https://github.com/martinezooo/VanillaShot";
 
     #[cfg(target_os = "macos")]
     {

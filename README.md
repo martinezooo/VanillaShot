@@ -78,7 +78,7 @@ shipping a DMG would only teach people to click past security warnings. Build it
 yourself:
 
 ```bash
-git clone https://github.com/hack-jitsu/VanillaShot.git
+git clone https://github.com/martinezooo/VanillaShot.git
 cd VanillaShot
 npm install
 npm run install:local
