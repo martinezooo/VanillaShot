@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="docs/hero.png" width="840"
+       alt="VanillaShot — screenshots that don't leak. A captured .env file with four secret values blacked out.">
+</p>
+
 # VanillaShot
 
 A local-first screenshot and screen-memory tool for macOS, built for people who
@@ -135,6 +140,11 @@ The main window is a **Settings** panel, not the editor. The editor opens as its
 own floating window after a capture.
 
 ## The editor
+
+<p align="center">
+  <img src="docs/editor.png" width="900"
+       alt="The VanillaShot editor: a tool palette along the top, and a bottom bar with Select, Crop, OCR Select, Copy, Save, Save + Copy, Memory and Add note.">
+</p>
 
 Load a screenshot by capturing a region, pasting with `Cmd+V`, or opening a file.
 
