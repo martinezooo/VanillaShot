@@ -1,16 +1,19 @@
 <p align="center">
   <img src="docs/hero.png" width="840"
-       alt="VanillaShot. Screenshots that don't leak. A captured .env file with four secret values blacked out.">
+       alt="VanillaShot. A captured .env file with four secret values blacked out.">
 </p>
 
 # VanillaShot
 
-A local-first screenshot and screen-memory tool for macOS. It reads the text in
-what you capture, flags anything that looks like a secret, and blacks it out in
-one click.
+A fast screenshot tool for macOS. Grab a region, edit it on the spot, send it.
+No account, no subscription, no upload, no nagging.
 
-Nothing leaves your machine. Capture, OCR, barcode decoding and redaction all
-run on-device, and the app makes no network requests at all.
+The editor is the point. Eleven tools, a keystroke each, on a canvas that opens
+the moment you let go of the mouse. Everything else in the app exists to save
+you a step: dictate a note instead of typing it, copy text straight out of an
+image, or find a screen you saw an hour ago.
+
+Free and open source, and it stays that way.
 
 Author: martinezooo, hack-jitsu.com
 
@@ -19,41 +22,133 @@ Author: martinezooo, hack-jitsu.com
 
 ## Contents
 
-- [What it does](#what-it-does)
+- [Why](#why)
+- [Capture](#capture)
+- [The editor](#the-editor)
+- [Voice notes](#voice-notes)
+- [Text in your screenshots](#text-in-your-screenshots)
+- [Secrets, caught before you send](#secrets-caught-before-you-send)
+- [Screen memory](#screen-memory)
 - [Requirements](#requirements)
 - [Install](#install)
 - [Permissions](#permissions)
-- [How capture works](#how-capture-works)
-- [It lives in the menu bar](#it-lives-in-the-menu-bar)
-- [The editor](#the-editor)
-- [Screen memory](#screen-memory)
-- [Privacy](#privacy)
 - [Where files go](#where-files-go)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Deep links](#deep-links)
 - [Raycast extension](#raycast-extension)
+- [Privacy](#privacy)
 - [Development](#development)
 - [License](#license)
 
-## What it does
+## Why
 
-**Capture and redact.** Press `Cmd+Shift+1` and drag a region. The editor opens
-with the shot already OCR'd. Anything that looks like a credential is flagged,
-and one click blacks out every flagged token. QR and barcodes are decoded and
-classified too, because a screenshot of a 2FA enrolment code gives away the seed
-just as completely as pasting it.
+Good screenshot tools on macOS are paid. The free ones stop at taking the
+picture, so you end up opening a separate editor to draw one arrow. VanillaShot
+tries to be the tool you would have paid for, without the price tag and without
+sending your screen to anyone.
 
-**Screen memory.** An opt-in background recorder that keeps a searchable history
-of your screen, so you can find an error message you closed an hour ago. It is
-off until you turn it on, and it records a lot. Read
-[Screen memory](#screen-memory) before enabling it.
+It is a menu-bar app. No Dock icon, no window in your way, no launch screen.
+
+## Capture
+
+Press `Cmd+Shift+1` and drag.
+
+The screen freezes the instant you press the shortcut, so menus stay open,
+video stops moving, and you can aim at something that would normally vanish.
+The app hides itself first, so it never lands in its own screenshot. `Esc`
+cancels.
+
+The editor opens right where you finished dragging.
+
+## The editor
+
+<p align="center">
+  <img src="docs/editor.png" width="900"
+       alt="The VanillaShot editor, with a tool palette along the top and an action bar along the bottom.">
+</p>
+
+Eleven tools: select, crop, arrow, border, text, highlight, strike, blur,
+pixelate, blackout, and OCR-select.
+
+They behave the way you expect. Drag to draw, drag a handle to resize, `Cmd+Z`
+to undo. `Cmd+S` saves a PNG, `Enter` saves and copies it to the clipboard in
+one go, and `Cmd+C` copies the selection.
+
+Nothing is destructive until you export, so you can move a blur after you have
+drawn it.
+
+## Voice notes
+
+Attach a note to a screenshot by talking instead of typing. Transcription runs
+as you speak, so you can watch the text appear and stop when it is right.
+
+The recording never touches the disk. Only the finished text is saved, as a
+`.txt` file next to the image.
+
+## Text in your screenshots
+
+Every new screenshot is read automatically, offline, with a bundled OCR engine.
+
+That gives you two things. Use the OCR-select tool to grab text out of an image
+the way you would from a web page, which is handy for error messages and
+terminal output that you cannot copy from. And it is how the app knows what is
+in the picture, which the next section builds on.
+
+## Secrets, caught before you send
+
+The recognised text is scanned for things that should not leave your machine:
+cloud keys, CI and forge tokens, JWTs, private key blocks, password hashes,
+addresses, emails, and values sitting next to words like `password`. One click
+blacks out everything it flagged.
+
+Barcodes are decoded too, because a screenshot of a 2FA enrolment code gives
+away the seed just as completely as pasting it. QR, Micro QR, rMQR, DataMatrix,
+Aztec, PDF417, Code 128, Code 39, EAN-13 and ITF are all read locally. Anything
+critical stays hidden until you choose to reveal it, and a decoded link is
+copied, never opened.
+
+Masking is always blackout, never blur. A blurred barcode can still carry
+enough contrast to be recovered.
+
+Treat it as a safety net rather than a guarantee. Look at the picture before
+you send it.
+
+## Screen memory
+
+An optional background recorder that gives you a searchable history of your
+screen, for when you closed something an hour ago and wish you had not.
+
+It saves a screenshot every 10 seconds, reads each one with OCR, and puts the
+text in a search index. A low-rate video track is kept alongside them, so the
+frames have context. Search finds the moment, and you get the frame.
+
+It is off until you switch it on. When it runs, it is broad, so here is the
+whole picture:
+
+| | |
+| --- | --- |
+| Captures | your entire primary display. No window is excluded. |
+| Screenshots | one JPEG every 10 seconds, each one OCR'd into a full-text index |
+| Video | H.264 at 5 fps, about 1 Mbps, in 5-minute segments |
+| Location | `~/Library/Application Support/com.hackjitsu.vanillashot/` |
+| Retention | 30 days by default |
+
+Two things worth knowing before you turn it on:
+
+- **It records VanillaShot too.** Open a screenshot in the editor while it runs
+  and the unredacted original goes into the index before you redact it.
+- **The store is not encrypted.** It is ordinary SQLite and video files. Any
+  process running as you can read them. Delete the folder to purge it.
+
+Two known gaps: the 30-day cleanup only advances while recording is on, and
+there is no "delete everything" button yet.
 
 ## Requirements
 
 | | |
 | --- | --- |
-| macOS | 12.3 or newer. The recorder needs ScreenCaptureKit, which arrived in 12.3. |
-| Hardware | Apple silicon only. Builds produce an `aarch64` binary. There is no universal or Intel build. |
+| macOS | 12.3 or newer |
+| Hardware | Apple silicon only. There is no universal or Intel build. |
 | Node | 20.19+ or 22.12+ |
 | Rust | stable toolchain |
 | Xcode | Command Line Tools, for `swiftc` |
@@ -63,19 +158,11 @@ xcode-select --install
 curl https://sh.rustup.rs -sSf | sh
 ```
 
-Restart your shell, then check:
-
-```bash
-rustc --version
-node --version
-```
-
 ## Install
 
-There is no signed or notarised download. A build produced here is ad-hoc
-signed, which macOS Gatekeeper rejects outright on a downloaded file, so
-shipping a DMG would only teach people to click past security warnings. Build it
-yourself:
+There is no signed or notarised download. A build made without an Apple
+Developer ID certificate is blocked by Gatekeeper, so posting a DMG would only
+teach people to click past security warnings. Build it yourself:
 
 ```bash
 git clone https://github.com/martinezooo/VanillaShot.git
@@ -85,176 +172,71 @@ npm run install:local
 ```
 
 That builds the app, signs it with a certificate from your keychain, and
-installs it to `/Applications/VanillaShot.app`.
+installs it to `/Applications/VanillaShot.app`. A free Apple Development
+certificate from Xcode is enough.
 
 The signing step matters. An ad-hoc signature carries no certificate, so macOS
-identifies the app by its code hash, and every rebuild looks like a brand-new
-app that has to be granted Screen Recording again. Signing with a real
-certificate, even a free Apple Development one from Xcode, keeps the permission
-across rebuilds. Set `VANILLASHOT_SIGN_IDENTITY` if the script picks the wrong
-certificate.
+identifies the app by its code hash, and every rebuild looks like a new app that
+has to be granted Screen Recording again. Set `VANILLASHOT_SIGN_IDENTITY` if the
+script picks the wrong certificate.
 
 ## Permissions
 
-**Screen Recording is required.** Neither capture nor screen memory works
-without it, and macOS hands back blank images rather than an error if it is
-missing.
+**Screen Recording is required.** Nothing works without it, and macOS returns
+blank images rather than an error when it is missing.
 
 Grant it in **System Settings > Privacy & Security > Screen Recording**, then
-restart the app. macOS only re-reads the grant at launch. VanillaShot checks the
-state without triggering a prompt, so Settings can tell you whether the
-permission is actually in place.
+restart the app. macOS only re-reads the grant at launch. Settings shows you
+the real state without triggering a prompt.
 
-Microphone and Speech Recognition are requested only if you use dictation when
-attaching a note. Audio is never written to disk. Only the transcribed text is
-saved.
-
-## How capture works
-
-macOS ships an interactive region selector (`screencapture -i`), but it selects
-against a live screen. Menus close while you aim, video keeps playing, and the
-editor can end up inside its own screenshot. VanillaShot freezes the screen
-instead:
-
-1. `Cmd+Shift+1` hides any visible VanillaShot window, so the app can never
-   appear in its own capture.
-2. It grabs a still of the display under the cursor.
-3. A full-screen overlay shows that still, dimmed, with a crosshair.
-4. You drag a rectangle over the frozen image. On release the region is cropped
-   out and opened in the editor.
-
-`Esc`, or a click without a drag, cancels.
-
-## It lives in the menu bar
-
-**`npm run tauri:dev` opens no window. Look in the menu bar.** VanillaShot is a
-menu-bar utility with no Dock icon. The tray menu holds region capture, the
-screen memory toggle, Settings and Quit.
-
-The main window is a Settings panel, not the editor. The editor opens as its own
-floating window after a capture.
-
-## The editor
-
-<p align="center">
-  <img src="docs/editor.png" width="900"
-       alt="The VanillaShot editor, with a tool palette along the top and an action bar along the bottom.">
-</p>
-
-Load a screenshot by capturing a region, pasting with `Cmd+V`, or opening a
-file.
-
-**OCR.** New screenshots are read automatically with a bundled `tesseract.js`
-and a local language model. No download, works offline. Screen-memory frames are
-read separately by Apple's Vision framework, which is faster and already on the
-system.
-
-**Secret detection.** The OCR'd text is scanned for what usually leaks through a
-screenshot: cloud keys (AWS, Google), forge and CI tokens (GitHub, GitLab,
-Slack, Stripe, SendGrid), JWTs and PASETOs, PEM private key blocks, password
-hashes (bcrypt, argon2, scrypt, LM/NT pairs, LDAP), Kerberos and NTLM material,
-long high-entropy strings, hashes, IPv4 and IPv6 addresses, MAC addresses,
-emails, URLs, and values sitting next to words like `password` or `secret`. One
-click blacks out every flagged token.
-
-**Barcodes.** QR, Micro QR, rMQR, DataMatrix, Aztec, PDF417, Code 128, Code 39,
-EAN-13 and ITF are decoded locally with `zxing-wasm`. Payloads are classified as
-critical, sensitive or benign, with the reason shown. Critical covers TOTP and
-HOTP seeds (`otpauth://`), Wi-Fi credentials (`WIFI:`), URLs with embedded
-credentials, JWTs, cloud keys and private key material.
-
-Critical payloads stay hidden until you reveal them, and a decoded link is never
-opened, only copied. Masking is always blackout, never blur, because a blurred
-symbol can still carry recoverable module contrast.
-
-**Tools.** Select, crop, OCR-select, arrow, border, blur, pixelate, blackout,
-highlight, strike and text.
-
-**Export.** Save a PNG or copy it to the clipboard.
-
-## Screen memory
-
-An opt-in background recorder. It is off until you start it from the tray, the
-Settings switch, or a deep link. Once running it is broad, so here is exactly
-what it does:
-
-| | |
-| --- | --- |
-| Captures | your entire primary display. No window is excluded. |
-| Video | H.264 at 5 fps, about 1 Mbps, cursor included, in 5-minute segments |
-| Keyframes | one JPEG every 10 seconds |
-| Indexing | every keyframe is OCR'd (Apple Vision, English and Polish) into a full-text search index |
-| Location | `~/Library/Application Support/com.hackjitsu.vanillashot/` in `segments/`, `frames/` and `memory.db` |
-| Retention | 30 days by default |
-
-Two things to know before you turn it on:
-
-- **It records VanillaShot too.** If you open a screenshot in the editor while
-  the recorder is running, the unredacted original is captured and indexed
-  before you redact it.
-- **The store is plain, unencrypted SQLite plus ordinary video files.** Any
-  process running as your user can read them without a macOS permission prompt.
-  Treat the data directory as sensitive. Delete it to purge.
-
-Two known gaps, stated plainly. The 30-day purge only advances while recording
-is running, and there is no "delete everything" button in the UI yet.
-
-## Privacy
-
-VanillaShot makes no network requests. No telemetry, no analytics, no crash
-reporting, no auto-updater, and no HTTP client in the binary. Capture, OCR,
-barcode decoding and redaction all happen on-device. The OCR language model, the
-barcode decoder and the UI font are bundled rather than fetched.
-
-The thing to keep in mind is not the network but the local machine. The
-screen-memory store is unencrypted, and any local process can open a
-`vanillashot://` link, including one that starts recording.
+Microphone and Speech Recognition are asked for only when you start dictating a
+note.
 
 ## Where files go
 
-Exported screenshots land in `~/Pictures` as
-`vanilla-shot-<pid>-<timestamp>.png`. The folder is shown in Settings.
-
-If you attach a note, a `.txt` file is written next to the image with the same
-name, holding the note text and the image's full path.
+Screenshots land in `~/Pictures` as `vanilla-shot-<pid>-<timestamp>.png`. The
+folder is shown in Settings. A note is saved as a `.txt` file next to its image.
 
 ## Keyboard shortcuts
 
 | Key | Action |
 | --- | --- |
-| `Cmd+Shift+1` | global region capture (also `Ctrl+Shift+1`) |
+| `Cmd+Shift+1` | capture a region (also `Ctrl+Shift+1`) |
+| `Enter` | save the PNG and copy it |
+| `Cmd+S` | save the PNG |
+| `Cmd+C` / `Cmd+X` | copy / cut the selection |
 | `Cmd+Z` | undo |
-| `Cmd+S` | save PNG |
-| `Cmd+C` / `Cmd+X` | copy / cut selection |
-| `Delete` / `Backspace` | delete selection |
-| `Esc` | cancel capture, or clear selection |
-| `Enter` | in the quick editor, save PNG and copy to clipboard |
+| `Delete` / `Backspace` | delete the selection |
+| `Esc` | cancel the capture, or clear the selection |
 
 ## Deep links
 
-The installed app registers the `vanillashot://` scheme. The verb set is fixed
-and takes no payloads, so there is no parsing surface.
+The app registers `vanillashot://`. The verb set is fixed and takes no
+payloads, so there is nothing to parse.
 
 | URL | Action |
 | --- | --- |
-| `vanillashot://capture` | start a region capture |
-| `vanillashot://show` | reveal the main window |
+| `vanillashot://capture` | capture a region |
+| `vanillashot://show` | show the main window |
 | `vanillashot://memory/start` | start screen memory |
 | `vanillashot://memory/stop` | stop screen memory |
 | `vanillashot://memory/toggle` | flip screen memory |
 
-```bash
-open "vanillashot://capture"
-```
-
-Unknown actions are ignored.
-
 ## Raycast extension
 
-`raycast/` holds a Raycast extension with three commands: Capture Region, Toggle
-Screen Memory, and Search Screen Memory. Actions travel over the
-`vanillashot://` scheme above. Search reads the memory database read-only. See
-[raycast/README.md](raycast/README.md).
+`raycast/` holds an extension with three commands: Capture Region, Toggle Screen
+Memory, and Search Screen Memory. See [raycast/README.md](raycast/README.md).
+
+## Privacy
+
+VanillaShot makes no network requests. No telemetry, no analytics, no crash
+reporting, no updater, and no HTTP client in the binary. Capture, OCR, barcode
+decoding and redaction all run on your machine, and the OCR model, the barcode
+decoder and the UI font are bundled rather than fetched.
+
+The thing to watch is not the network but the local disk. Screen memory is
+stored unencrypted, and any local process can open a `vanillashot://` link,
+including one that starts recording.
 
 ## Development
 
@@ -267,19 +249,11 @@ npm run install:local # build, sign, install to /Applications
 npm run lint
 ```
 
-`npm run dev` serves the editor in a browser. OCR, detection, barcode scanning
-and annotation all work there. Capture, screen memory, the tray and deep links
-are desktop-only.
-
-The OCR assets under `public/tesseract/` are vendored before dev and build by
-`scripts/vendor-tesseract.mjs`. The Swift helpers for the recorder and Vision
-OCR are compiled by `src-tauri/build.rs` and shipped as bundle resources.
-
 See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions.
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
-Bundled third-party components and their licenses are listed in
+Bundled third-party components are listed in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

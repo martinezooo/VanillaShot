@@ -43,7 +43,7 @@
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1"
   },
-  "description": "Local-first screenshot and screen-memory app for macOS, focused on OCR-driven redaction.",
+  "description": "Fast, free screenshot tool for macOS with a rich on-the-spot editor, voice notes, OCR and searchable screen history. Local-first, no account, no upload.",
   "license": "MIT",
   "repository": {
     "type": "git",

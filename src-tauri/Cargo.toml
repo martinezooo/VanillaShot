@@ -1,7 +1,7 @@
 [package]
 name = "vanilla-shot"
 version = "0.2.0"
-description = "Local-first screenshot and screen-memory tool for macOS, focused on OCR-driven redaction."
+description = "Fast, free screenshot tool for macOS with a rich on-the-spot editor, voice notes, OCR and searchable screen history."
 authors = ["martinezooo · hack-jitsu.com"]
 license = "MIT"
 repository = "https://github.com/martinezooo/VanillaShot"
