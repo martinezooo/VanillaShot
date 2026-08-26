@@ -35,11 +35,28 @@ payloads, but any local process can invoke it, including `memory/start`, and so
 can a web page the user clicks through. Findings that widen this surface, or
 that get arbitrary data through it, are in scope.
 
+**Untrusted text reaching a sink.** Decoded payloads and OCR text are rendered
+as text and copied on request, and nothing else. The build ships no shell or
+opener plugin, both `/usr/bin/open` call sites pass a constant compiled into the
+binary, and no payload reaches a filename, a path, or a query. Anything that
+breaks one of those statements is in scope.
+
 **Redaction correctness.** This is the most serious bug class here, because the
 whole point of the tool is that a redacted screenshot is safe to share. Report
 anything that lets a redaction be reversed: recoverable pixels under a blur or
 blackout, original data surviving in the exported PNG or its metadata, or a
 masked barcode that still decodes.
+
+Blackout is drawn fully opaque, with the compositing state forced rather than
+inherited, so no trace of the original pixels reaches the export. Earlier builds
+drew it at 98% opacity, which left the source pattern recoverable with a levels
+stretch. That is fixed in 0.2.1.
+
+**Classifier bypasses.** Decoded barcode payloads and OCR text are
+attacker-controlled. If you can craft a payload that carries a secret past the
+classifier and out of "Mask all sensitive", that is a bug worth reporting.
+Invisible characters are stripped before classification for this reason, and
+unknown URI schemes are treated as sensitive rather than plain text.
 
 **Detection gaps.** A secret format that goes unflagged is worth reporting. The
 tool is a safety net rather than a guarantee, so always check a screenshot

@@ -265,6 +265,19 @@ const CODE_SEVERITY_LABEL: Record<DetectedCode['severity'], string> = {
 }
 const CODE_PAYLOAD_PREVIEW_LIMIT = 140
 
+/**
+ * Renders invisible characters visibly, so the payload on screen cannot read as
+ * something other than the bytes that were decoded. A right-to-left override in
+ * a QR code otherwise lets an attacker show one URL and encode another.
+ */
+const escapeInvisible = (text: string): string =>
+  text.replace(
+    // Matching control characters is the whole point here.
+    // eslint-disable-next-line no-control-regex
+    /[\u0000-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  )
+
 const truncatePayload = (text: string): string =>
   text.length > CODE_PAYLOAD_PREVIEW_LIMIT
     ? `${text.slice(0, CODE_PAYLOAD_PREVIEW_LIMIT)}...`
@@ -871,6 +884,7 @@ function App() {
   const quickEditorOpenedAtRef = useRef(0)
   const quickBlurGuardUntilRef = useRef(0)
   const imageLoadRequestIdRef = useRef(0)
+  const ocrWorkersRef = useRef<Set<Awaited<ReturnType<typeof createWorker>>>>(new Set())
   const memoryCountdownStartedAtRef = useRef<number | null>(null)
   const reportRecorderRef = useRef<MediaRecorder | null>(null)
   const reportStreamRef = useRef<MediaStream | null>(null)
@@ -977,6 +991,17 @@ function App() {
     setOcrText('')
     setOcrStatus('OCR idle')
     setOcrProgress(0)
+    setOcrRunning(false)
+    setOcrSelectionRunning(false)
+    // Barcode state has to go with the OCR state. Leaving it behind meant the
+    // panel kept listing the previous image's codes while the new one was still
+    // scanning, so "Mask all sensitive" stamped blackouts at the old
+    // coordinates and reported success.
+    setDetectedCodes([])
+    setRevealedCodeIds([])
+    setCodeScanError('')
+    setCodeScanProcessedSource(null)
+    setCodeScanRunning(false)
     setZoomLevel(1)
     setShowCrosshair(false)
     setTextPromptPosition(null)
@@ -996,14 +1021,14 @@ function App() {
     resetReportDebugState()
   }, [resetReportDebugState])
 
-  const closeCurrentDesktopWindow = useCallback(async () => {
+  const hideCurrentDesktopWindow = useCallback(async () => {
     if (!isDesktopRuntime()) {
       return
     }
 
     try {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-      await getCurrentWebviewWindow().close()
+      await getCurrentWebviewWindow().hide()
     } catch {
       // Ignore restricted desktop environments.
     }
@@ -1039,11 +1064,14 @@ function App() {
     setMemoryCornerHudOpen(false)
 
     if (isDedicatedQuickWindow) {
-      void closeCurrentDesktopWindow()
+      // Keep the WKWebView alive and reuse it for the next capture. Destroying
+      // a scrolling webview while WebKit is processing a display refresh can
+      // leave a pending scrolling-tree callback pointing at freed state.
+      void hideCurrentDesktopWindow()
     }
   }, [
-    closeCurrentDesktopWindow,
     collapseQuickEditorToMemoryHud,
+    hideCurrentDesktopWindow,
     isDedicatedQuickWindow,
     memoryStatus?.recording,
     memoryStopSummary,
@@ -1089,6 +1117,10 @@ function App() {
     ) => {
       const requestId = imageLoadRequestIdRef.current + 1
       imageLoadRequestIdRef.current = requestId
+      ocrWorkersRef.current.forEach((worker) => {
+        void worker.terminate().catch(() => {})
+      })
+      ocrWorkersRef.current.clear()
 
       const image = await new Promise<HTMLImageElement>((resolve, reject) => {
         const nextImage = new Image()
@@ -2073,7 +2105,14 @@ function App() {
       switch (annotation.type) {
         case 'blackout': {
           ctx.save()
-          ctx.fillStyle = 'rgba(10, 10, 10, 0.98)'
+          // Fully opaque, and the compositing state is forced rather than
+          // assumed. A blackout at 98% alpha leaves 2% of every original pixel
+          // behind, which survives a lossless PNG export as a few levels of
+          // contrast and can be stretched back out. A masked QR code re-decodes
+          // from that residue.
+          ctx.globalAlpha = 1
+          ctx.globalCompositeOperation = 'source-over'
+          ctx.fillStyle = '#0a0a0a'
           ctx.fillRect(annotation.x, annotation.y, annotation.width, annotation.height)
           ctx.restore()
           return
@@ -2671,6 +2710,8 @@ function App() {
       return
     }
 
+    const imageRequestId = imageLoadRequestIdRef.current
+
     const width = Math.max(1, Math.round(selection.width))
     const height = Math.max(1, Math.round(selection.height))
     const selectionCanvas = document.createElement('canvas')
@@ -2707,7 +2748,16 @@ function App() {
 
     try {
       worker = await createWorker('eng', undefined, getLocalWorkerOptions())
+      ocrWorkersRef.current.add(worker)
+      if (imageLoadRequestIdRef.current !== imageRequestId) {
+        return
+      }
+
       const result = await worker.recognize(selectionCanvas.toDataURL('image/png'))
+      if (imageLoadRequestIdRef.current !== imageRequestId) {
+        return
+      }
+
       const extractedText = result.data.text.trim()
       const resultText = extractedText.length > 0 ? extractedText : 'No text detected in this area.'
       setOcrSelectionResult({
@@ -2716,14 +2766,21 @@ function App() {
       })
       setOcrStatus('OCR selection done')
     } catch (error) {
+      if (imageLoadRequestIdRef.current !== imageRequestId) {
+        return
+      }
+
       const message = error instanceof Error ? error.message : 'OCR selection failed'
       setErrorMessage(message)
       setOcrStatus('OCR selection error')
       setOcrSelectionResult(null)
     } finally {
-      setOcrSelectionRunning(false)
       if (worker) {
-        await worker.terminate()
+        ocrWorkersRef.current.delete(worker)
+        await worker.terminate().catch(() => {})
+      }
+      if (imageLoadRequestIdRef.current === imageRequestId) {
+        setOcrSelectionRunning(false)
       }
     }
   }, [baseImage])
@@ -2971,15 +3028,23 @@ function App() {
       return
     }
 
+    const imageRequestId = imageLoadRequestIdRef.current
+
     setErrorMessage('')
     setOcrRunning(true)
     setOcrProgress(0)
     setOcrStatus('Initializing OCR worker...')
 
+    let worker: Awaited<ReturnType<typeof createWorker>> | null = null
+
     try {
-      const worker = await createWorker('eng', undefined, {
+      worker = await createWorker('eng', undefined, {
         ...getLocalWorkerOptions(),
         logger: (message: LoggerMessage) => {
+          if (imageLoadRequestIdRef.current !== imageRequestId) {
+            return
+          }
+
           if (typeof message.progress === 'number') {
             setOcrProgress(message.progress)
           }
@@ -2989,12 +3054,18 @@ function App() {
           }
         },
       })
+      ocrWorkersRef.current.add(worker)
+      if (imageLoadRequestIdRef.current !== imageRequestId) {
+        return
+      }
 
       // `blocks` has to be requested explicitly: recognize() defaults to
       // `{ text: true }`, and without this the word boxes below are always
       // empty - which is what kept sensitive-token detection from ever firing.
       const result = await worker.recognize(imageSource, {}, { text: true, blocks: true })
-      await worker.terminate()
+      if (imageLoadRequestIdRef.current !== imageRequestId) {
+        return
+      }
 
       const recognizedLines = collectWordLinesFromBlocks(result.data.blocks)
       const words: OcrWord[] = []
@@ -3025,11 +3096,21 @@ function App() {
       setOcrStatus(`OCR done (${filteredWords.length} words)`)
       setOcrProgress(1)
     } catch (error) {
+      if (imageLoadRequestIdRef.current !== imageRequestId) {
+        return
+      }
+
       const message = error instanceof Error ? error.message : 'OCR failed'
       setErrorMessage(message)
       setOcrStatus('OCR error')
     } finally {
-      setOcrRunning(false)
+      if (worker) {
+        ocrWorkersRef.current.delete(worker)
+        await worker.terminate().catch(() => {})
+      }
+      if (imageLoadRequestIdRef.current === imageRequestId) {
+        setOcrRunning(false)
+      }
     }
   }, [baseImage, imageSource, ocrRunning])
 
@@ -3051,25 +3132,38 @@ function App() {
       return
     }
 
+    const imageRequestId = imageLoadRequestIdRef.current
+    const scanImage = baseImage
+
     setCodeScanRunning(true)
     setCodeScanError('')
 
     try {
-      const codes = await scanCodesFromImage(baseImage)
+      const codes = await scanCodesFromImage(scanImage)
+      if (imageLoadRequestIdRef.current !== imageRequestId) {
+        return
+      }
+
       setDetectedCodes(codes)
       setRevealedCodeIds([])
 
       if (codes.length > 0 && quickEditorOpen) {
         setZoomLevel(
-          getSuggestedQuickZoom(baseImage, quickMonitorScale || window.devicePixelRatio || 1, QUICK_CODES_PANEL_RESERVE),
+          getSuggestedQuickZoom(scanImage, quickMonitorScale || window.devicePixelRatio || 1, QUICK_CODES_PANEL_RESERVE),
         )
       }
     } catch (error) {
+      if (imageLoadRequestIdRef.current !== imageRequestId) {
+        return
+      }
+
       const message = error instanceof Error ? error.message : 'Barcode scan failed'
       setDetectedCodes([])
       setCodeScanError(message)
     } finally {
-      setCodeScanRunning(false)
+      if (imageLoadRequestIdRef.current === imageRequestId) {
+        setCodeScanRunning(false)
+      }
     }
   }, [baseImage, quickEditorOpen, quickMonitorScale])
 
@@ -3489,15 +3583,14 @@ function App() {
     setTimeout(() => {
       setIsSavingAnimation(false)
       setErrorMessage('')
+      setQuickEditorOpen(false)
 
       if (isDedicatedQuickWindow) {
-        void closeCurrentDesktopWindow()
+        void hideCurrentDesktopWindow()
         return
       }
-
-      setQuickEditorOpen(false)
     }, 380)
-  }, [buildAttachedNoteText, closeCurrentDesktopWindow, copyBlobToClipboard, exportBlob, isDedicatedQuickWindow, saveBlobToDisk, showQuickCommitFx])
+  }, [buildAttachedNoteText, copyBlobToClipboard, exportBlob, hideCurrentDesktopWindow, isDedicatedQuickWindow, saveBlobToDisk, showQuickCommitFx])
 
   const handleZoomIn = useCallback(() => {
     setZoomLevel((value) => clamp(value + 0.15, MIN_ZOOM, MAX_ZOOM))
@@ -4318,8 +4411,13 @@ function App() {
                           <span className="quick-code-severity">{CODE_SEVERITY_LABEL[code.severity]}</span>
                           <span className="quick-code-reason">{code.reason}</span>
                         </div>
-                        <p className="quick-code-payload" title={revealed ? code.text : undefined}>
-                          {revealed ? truncatePayload(code.text) : 'Hidden - contains secret material'}
+                        <p
+                          className="quick-code-payload"
+                          title={revealed ? escapeInvisible(code.text) : undefined}
+                        >
+                          {revealed
+                            ? truncatePayload(escapeInvisible(code.text))
+                            : 'Hidden - contains secret material'}
                         </p>
                         <div className="quick-code-actions">
                           {code.severity === 'critical' && (
@@ -4331,13 +4429,18 @@ function App() {
                               {revealed ? 'Hide' : 'Reveal'}
                             </button>
                           )}
-                          <button
-                            className="button ghost mini"
-                            onClick={() => void handleCopyCodeText(code)}
-                            type="button"
-                          >
-                            Copy payload
-                          </button>
+                          {/* Hiding a critical payload has to withhold it from
+                              the clipboard too, or the reveal gate only covers
+                              the screen. */}
+                          {revealed && (
+                            <button
+                              className="button ghost mini"
+                              onClick={() => void handleCopyCodeText(code)}
+                              type="button"
+                            >
+                              Copy payload
+                            </button>
+                          )}
                           <button className="button ghost mini" onClick={() => maskCodes([code])} type="button">
                             Mask
                           </button>

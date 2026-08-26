@@ -2,12 +2,13 @@
   "name": "vanilla-shot",
   "author": "martinezooo · hack-jitsu.com",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "vitest run",
     "test:capture:smoke": "bash scripts/verify-region-capture.sh",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -41,7 +42,8 @@
     "globals": "^16.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.0.0"
   },
   "description": "Fast, free screenshot tool for macOS with a rich on-the-spot editor, voice notes, OCR and searchable screen history. Local-first, no account, no upload.",
   "license": "MIT",

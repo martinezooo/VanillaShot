@@ -92,19 +92,42 @@ const toRect = (result: ReadResult): CodeRect | null => {
   }
 }
 
-const toImageData = (image: HTMLImageElement): ImageData | null => {
-  const canvas = document.createElement('canvas')
-  canvas.width = image.naturalWidth
-  canvas.height = image.naturalHeight
+/**
+ * Pixel budget handed to the decoder.
+ *
+ * zxing runs synchronously on the main thread, and `tryHarder`, `tryRotate` and
+ * `tryInvert` each multiply the work. At full retina resolution that already
+ * costs a noticeable pause, and an image whose dimensions someone else chose
+ * can freeze the editor for seconds. 12MP covers a retina full-screen capture
+ * with room to spare, and codes stay legible after downscaling because a symbol
+ * worth decoding is far larger than one pixel per module.
+ */
+const MAX_SCAN_PIXELS = 12_000_000
 
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context || canvas.width === 0 || canvas.height === 0) {
+type ScanSource = { imageData: ImageData; scale: number }
+
+const toImageData = (image: HTMLImageElement): ScanSource | null => {
+  const naturalWidth = image.naturalWidth
+  const naturalHeight = image.naturalHeight
+  if (naturalWidth === 0 || naturalHeight === 0) {
     return null
   }
 
-  context.drawImage(image, 0, 0)
+  const pixels = naturalWidth * naturalHeight
+  const scale = pixels > MAX_SCAN_PIXELS ? Math.sqrt(MAX_SCAN_PIXELS / pixels) : 1
 
-  return context.getImageData(0, 0, canvas.width, canvas.height)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(naturalWidth * scale))
+  canvas.height = Math.max(1, Math.round(naturalHeight * scale))
+
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    return null
+  }
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+  return { imageData: context.getImageData(0, 0, canvas.width, canvas.height), scale }
 }
 
 /**
@@ -112,10 +135,12 @@ const toImageData = (image: HTMLImageElement): ImageData | null => {
  * natural image pixels, matching the OCR word boxes.
  */
 export const scanCodesFromImage = async (image: HTMLImageElement): Promise<DetectedCode[]> => {
-  const imageData = toImageData(image)
-  if (!imageData) {
+  const source = toImageData(image)
+  if (!source) {
     return []
   }
+
+  const { imageData, scale } = source
 
   configureModule()
 
@@ -134,10 +159,22 @@ export const scanCodesFromImage = async (image: HTMLImageElement): Promise<Detec
       return
     }
 
-    const rect = toRect(result)
-    if (!rect) {
+    const scanRect = toRect(result)
+    if (!scanRect) {
       return
     }
+
+    // Coordinates come back in the (possibly downscaled) scan space, so undo the
+    // scale before they are used as mask rectangles over the full-size image.
+    const rect =
+      scale === 1
+        ? scanRect
+        : {
+            x: Math.round(scanRect.x / scale),
+            y: Math.round(scanRect.y / scale),
+            width: Math.round(scanRect.width / scale),
+            height: Math.round(scanRect.height / scale),
+          }
 
     const { severity, reason } = classifyCodePayload(result.text)
     const url = parseHttpUrl(result.text)

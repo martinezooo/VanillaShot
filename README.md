@@ -28,6 +28,7 @@ Author: martinezooo, hack-jitsu.com
 - [Voice notes](#voice-notes)
 - [Text in your screenshots](#text-in-your-screenshots)
 - [Secrets, caught before you send](#secrets-caught-before-you-send)
+- [QR codes and barcodes](#qr-codes-and-barcodes)
 - [Screen memory](#screen-memory)
 - [Requirements](#requirements)
 - [Install](#install)
@@ -101,17 +102,52 @@ cloud keys, CI and forge tokens, JWTs, private key blocks, password hashes,
 addresses, emails, and values sitting next to words like `password`. One click
 blacks out everything it flagged.
 
-Barcodes are decoded too, because a screenshot of a 2FA enrolment code gives
-away the seed just as completely as pasting it. QR, Micro QR, rMQR, DataMatrix,
-Aztec, PDF417, Code 128, Code 39, EAN-13 and ITF are all read locally. Anything
-critical stays hidden until you choose to reveal it, and a decoded link is
-copied, never opened.
-
-Masking is always blackout, never blur. A blurred barcode can still carry
-enough contrast to be recovered.
+Masking is always blackout, never blur. A blurred region can still carry enough
+contrast to be recovered, and a blurred barcode often still scans.
 
 Treat it as a safety net rather than a guarantee. Look at the picture before
 you send it.
+
+## QR codes and barcodes
+
+Every screenshot is scanned for codes automatically, the moment it loads. You
+do not press anything. A screenshot of a 2FA enrolment code gives away the seed
+just as completely as pasting it, and that is easy to forget when the code is
+just a small square in the corner of a window.
+
+QR, Micro QR, rMQR, DataMatrix, Aztec, PDF417, Code 128, Code 39, EAN-13 and
+ITF are all decoded on your machine.
+
+Each code found is outlined on the image and listed with what it contains and
+why that matters:
+
+- **critical** for TOTP and HOTP seeds, Wi-Fi credentials, URLs with credentials
+  in them, and private key material
+- **sensitive** for links, contact cards, email addresses, phone numbers, and
+  any scheme the app does not recognise
+- **benign** for the rest
+
+From there you either mask one code or click **Mask all sensitive**, which
+covers everything that is not benign in one go. Critical payloads stay hidden
+behind a Reveal button, and stay out of the clipboard until you reveal them.
+
+### Decoded payloads are treated as inert data
+
+A payload from a barcode is attacker-controlled by definition. Anyone who gets
+you to screenshot their QR code chooses those bytes. So a decoded payload is
+never opened, never executed, and never put anywhere it could be interpreted:
+
+- It is shown as text and copied on request. There is no Open button, no
+  `window.open`, no link, and nothing hands it to the system opener.
+- The app ships no shell or opener plugin at all, so the webview has no way to
+  launch anything. The two places that do call `/usr/bin/open` pass a fixed
+  URL compiled into the binary and take no argument from the page.
+- It never reaches a filename or a path. Exports are named from the process id
+  and a timestamp in a fixed folder.
+- Invisible characters are shown escaped, so a payload cannot use a
+  right-to-left override to display one address while encoding another.
+
+The same holds for OCR text, which is equally attacker-controlled.
 
 ## Screen memory
 

@@ -185,7 +185,7 @@ fn open_project_page() -> Result<(), CaptureError> {
             .status()
             .map_err(|error| CaptureError::failed(format!("Could not open the project page: {error}")))?;
 
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -242,6 +242,10 @@ fn open_quick_capture_window(
     .always_on_top(true)
     .skip_taskbar(true)
     .shadow(false)
+    // This window is intentionally reused while hidden. It must still receive
+    // the next capture event; WebKit's default inactive policy may suspend or
+    // unload a hidden view, leaving the editor unable to wake itself back up.
+    .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
     .background_color(tauri::window::Color(0, 0, 0, 0));
 
     #[cfg(target_os = "macos")]
@@ -755,7 +759,11 @@ fn build_frozen_overlay(
     .skip_taskbar(true)
     .focused(false)
     .visible(false)
-    .shadow(false);
+    .shadow(false)
+    // The overlay receives and decodes a frozen-screen payload before it is
+    // shown. Suspending hidden JavaScript deadlocks that handshake because the
+    // frontend cannot call `frozen_ready_to_show` until it runs again.
+    .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled);
 
     builder = builder.visible_on_all_workspaces(true);
     builder.build()?;
@@ -834,7 +842,6 @@ fn start_background_capture(app_handle: tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
         start_frozen_capture(app_handle);
-        return;
     }
 
     #[cfg(not(target_os = "macos"))]
