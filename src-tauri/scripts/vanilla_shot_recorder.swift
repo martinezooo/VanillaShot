@@ -1,4 +1,4 @@
-/// VanillaShot Memory – ScreenCaptureKit video recorder.
+/// VanillaShot Memory: ScreenCaptureKit video recorder.
 ///
 /// Records the primary display to a MOV file using H.264.
 /// Periodically saves JPEG keyframes and prints their paths to stdout

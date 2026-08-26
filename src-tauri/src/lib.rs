@@ -243,7 +243,7 @@ fn open_quick_capture_window(
     .skip_taskbar(true)
     .shadow(false)
     // This window is intentionally reused while hidden. It must still receive
-    // the next capture event; WebKit's default inactive policy may suspend or
+    // the next capture event. WebKit's default inactive policy may suspend or
     // unload a hidden view, leaving the editor unable to wake itself back up.
     .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
     .background_color(tauri::window::Color(0, 0, 0, 0));
@@ -717,7 +717,7 @@ fn start_frozen_capture(app_handle: tauri::AppHandle) {
         }
 
         // Reuse the pre-warmed overlay when present so the hot path never pays
-        // for a webview boot; otherwise build one now. Either way the overlay
+        // for a webview boot. Otherwise build one now. Either way the overlay
         // stays hidden until its webview has painted the still and shows itself
         // via frozen_ready_to_show, so the user never sees a blank flash.
         if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
@@ -785,7 +785,7 @@ fn prewarm_frozen_overlay(app_handle: &tauri::AppHandle) {
     }
 }
 
-/// The overlay's webview has painted the still; reveal the (until now hidden)
+/// The overlay's webview has painted the still. Reveal the (until now hidden)
 /// window. Called from FrozenCapture once the image has decoded.
 #[tauri::command]
 fn frozen_ready_to_show(app_handle: tauri::AppHandle) {
@@ -994,7 +994,7 @@ fn handle_deep_link(app_handle: &tauri::AppHandle, raw_url: &str) {
             let action = action.clone();
             tauri::async_runtime::spawn(async move {
                 let recording = handle.state::<memory::MemoryState>().is_recording();
-                // start and stop are idempotent; only toggle flips state.
+                // start and stop are idempotent. Only toggle flips state.
                 let start = match action.as_str() {
                     "memory/start" => !recording,
                     "memory/stop" => false,

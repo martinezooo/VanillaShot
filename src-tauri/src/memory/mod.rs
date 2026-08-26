@@ -76,13 +76,13 @@ impl MemoryState {
 ///
 /// The store has lived in several places across renames (Vulshot -> AYE ->
 /// Vanilla Shoot -> VanillaShot, and previously in ~/Pictures). Each old
-/// location is migrated in turn so an existing install keeps its history; if a
+/// location is migrated in turn so an existing install keeps its history. If a
 /// rename fails, the old directory is used as-is rather than silently starting
 /// an empty store.
 /// Moves an existing store's contents into the new data directory. Only the
 /// live data is carried over - the database (with its WAL/SHM sidecars), the
 /// video segments and the JPEG frames. The old `bin/` folder of runtime-
-/// compiled helpers is intentionally left behind; helpers now ship in the app
+/// compiled helpers is intentionally left behind. Helpers now ship in the app
 /// bundle and executables no longer belong in the data directory.
 fn migrate_store(from: &Path, to: &Path) -> std::io::Result<()> {
     fs::create_dir_all(to)?;
@@ -142,7 +142,7 @@ fn memory_data_dir() -> PathBuf {
             return data_dir;
         }
 
-        // Migration failed; keep using the old location rather than starting
+        // Migration failed. Keep using the old location rather than starting
         // an empty store.
         return legacy_dir;
     }

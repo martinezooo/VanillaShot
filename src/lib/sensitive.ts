@@ -130,7 +130,7 @@ const looksLikePassword = (token: string): boolean => {
     Number(/\d/.test(token)) +
     Number(/[^A-Za-z0-9]/.test(token))
 
-  // Shell prompts and paths carry symbols too; a password does not contain
+  // Shell prompts and paths carry symbols too. A password does not contain
   // path/prompt punctuation.
   if (/[/~$@\\]|:~|:\s*$|\$\s*$/.test(token)) {
     return false

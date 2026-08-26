@@ -17,7 +17,7 @@
 #
 # which survives rebuilds, so the grant is given once.
 #
-# Override the identity with VANILLASHOT_SIGN_IDENTITY; pass its SHA-1 or its
+# Override the identity with VANILLASHOT_SIGN_IDENTITY. Pass its SHA-1 or its
 # full name from `security find-identity -v -p codesigning`.
 
 set -euo pipefail

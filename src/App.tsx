@@ -475,7 +475,7 @@ const getSuggestedQuickZoom = (
     return 1
   }
 
-  // The top toolbar and the bottom action bar are the only fixed occupants;
+  // The top toolbar and the bottom action bar are the only fixed occupants.
   // everything between them belongs to the capture.
   const availableWidth = Math.max(360, window.innerWidth - QUICK_VIEW_HORIZONTAL_RESERVE - extraHorizontalReserve)
   const availableHeight = Math.max(240, window.innerHeight - QUICK_VIEW_VERTICAL_RESERVE)
@@ -487,7 +487,7 @@ const getSuggestedQuickZoom = (
     return 1
   }
 
-  // Leave a capture that already fits at a sensible size alone; scale small
+  // Leave a capture that already fits at a sensible size alone. Scale small
   // ones up so they are readable, and large ones down so they are visible.
   if (Math.abs(suggestedZoom - 1) < QUICK_AUTO_ZOOM_DEADBAND) {
     return 1

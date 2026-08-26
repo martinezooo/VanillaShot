@@ -12,7 +12,7 @@ const FROZEN_PAYLOAD_EVENT = 'frozen://payload'
  *
  * Instead of macOS's live `screencapture -i`, the backend grabs a still of the
  * display, hides the app, and shows this overlay full-screen on top of it. The
- * user drags a rectangle over the frozen image; on release the region is
+ * user drags a rectangle over the frozen image. On release the region is
  * cropped from the still and handed to the quick editor. Because the still was
  * taken with the app hidden, the editor never ends up in its own shot, and
  * moving content (video, menus) stays put while you aim.
@@ -56,7 +56,7 @@ export default function FrozenCapture() {
     setError(null)
     setPayload(next)
 
-    // Reveal once the still has decoded. Note: no requestAnimationFrame here —
+    // Reveal once the still has decoded. No requestAnimationFrame here:
     // the window is still hidden and rAF is paused while hidden, so gating the
     // reveal on it would deadlock (the window can never show). decode() runs off
     // the compositor and resolves while hidden. A timeout backstops a stuck decode.

@@ -56,7 +56,7 @@ pub async fn memory_start(
         return Ok("Already recording".into());
     }
 
-    // Helpers ship pre-compiled inside the bundle; resolve them from Resources.
+    // Helpers ship pre-compiled inside the bundle. Resolve them from Resources.
     let recorder_bin = crate::memory::ocr::resolve_helper(&app_handle, "vanilla_shot_recorder")?;
     let ocr_bin = crate::memory::ocr::resolve_helper(&app_handle, "ocr_vision")?;
 

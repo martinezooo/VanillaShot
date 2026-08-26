@@ -6,56 +6,47 @@ All notable changes to VanillaShot are recorded here. The format follows
 
 ## [0.2.1] - 2026-08-22
 
-Security fixes in the redaction and barcode paths, found by auditing what
-happens when the decoded payload and the OCR text are treated as fully
-attacker-controlled, which they are.
+Security and stability fixes.
 
 ### Fixed
 
-- **Blackout redaction did not fully redact.** The mask was drawn at 98%
-  opacity, so 2% of every original pixel survived into the exported PNG. On a
-  black and white pattern that left five levels of contrast, enough to stretch
-  the original back out and re-decode a masked QR code. The mask is now fully
-  opaque and forces its own compositing state. Verified end to end: a QR
-  carrying an `otpauth://` seed decodes before masking and does not decode from
-  the export afterwards.
-- **One invisible character defeated the classifier.** Classification trimmed
-  whitespace but not Unicode format characters, so a payload starting with a
-  zero-width space classified as plain text. A 2FA seed hidden that way skipped
-  the reveal gate and was left out of "Mask all sensitive". Format and control
-  characters are now stripped before classification, while the payload shown and
-  copied stays byte-exact.
-- **PGP private keys classified as benign.** PGP armor ends in " BLOCK", which
-  the private key pattern did not match, so a paper backup of a key was exported
-  intact and still scannable. Any armored block is now at least sensitive.
-- **Unknown URI schemes classified as benign**, so `file:`, `data:` and vendor
-  schemes were skipped by "Mask all sensitive". Anything that is not http or
-  https is now treated as sensitive.
-- **Codes from the previous screenshot stayed on screen** while the new one was
-  being scanned, so "Mask all sensitive" could stamp blackouts at the old
-  coordinates and report success. OCR and barcode results are now tied to the
-  image generation that started them, and obsolete OCR workers are stopped when
-  another image begins loading.
-- **"Copy payload" ignored the reveal gate**, so a payload displayed as hidden
-  still went to the clipboard in full.
-- **Barcode decoding could freeze the editor.** It ran at full resolution on the
-  main thread with every expensive option on, so an image whose size someone
-  else chose blocked the UI for seconds. Input is now capped at 12 megapixels
-  and mask rectangles are scaled back to the original.
-- **Closing the quick editor could crash the app inside WebKit.** The editor
-  destroyed its WKWebView while WebKit could still be processing an asynchronous
-  scrolling update. The editor now hides and reuses one window between captures,
-  avoiding the teardown race and making subsequent captures open faster. The
-  hidden editor and capture overlay also opt out of WebKit suspension so they can
-  receive the event that wakes them for the next capture.
+- Blackout masks were drawn at 98% opacity, so 2% of every original pixel
+  reached the exported PNG. That is enough contrast to stretch the original back
+  out, and a masked QR code re-decoded from it. Masks are fully opaque now.
+  Anything redacted with 0.2.0 should be treated as unredacted.
+- The classifier trimmed whitespace but not invisible formatting characters, so
+  a payload starting with a zero-width space was labelled plain text. A 2FA seed
+  hidden that way skipped the reveal gate and was left out of "Mask all
+  sensitive". Those characters are stripped before classification now. The
+  payload shown and copied is unchanged.
+- PGP private keys were classified as benign, because the armor ends in
+  " BLOCK" and the pattern did not allow for it. Any armored block is at least
+  sensitive now.
+- Unknown URI schemes were classified as benign, so `file:` and `data:` were
+  skipped by "Mask all sensitive". Anything other than http and https counts as
+  sensitive now.
+- Codes from the previous screenshot stayed listed while the next one was
+  scanning, so masking could stamp rectangles at the old coordinates and report
+  success. OCR and scan results are tied to the image that started them, and
+  superseded OCR workers are stopped.
+- "Copy payload" ignored the reveal gate, so a payload shown as hidden still
+  went to the clipboard in full.
+- Barcode decoding ran at full resolution on the main thread with every
+  expensive option on, so a large image could block the editor for seconds.
+  Input is capped at 12 megapixels and mask rectangles are scaled back.
+- Closing the quick editor could crash the app inside WebKit, which was still
+  working on an asynchronous scrolling update when the view was destroyed. The
+  editor keeps one window and hides it between captures, which also makes the
+  next capture open faster. The hidden editor and the capture overlay opt out of
+  WebKit background throttling, so a suspended view can still receive the event
+  that wakes it.
 
 ### Changed
 
 - Invisible characters in a decoded payload are shown escaped, so a payload
-  cannot use a right-to-left override to display one address while encoding
-  another.
-- README documents the automatic code scanning, and states plainly that decoded
-  payloads are never opened, executed, or used to build a path or a query.
+  cannot display one address while encoding another.
+- README covers the automatic code scanning and what happens to a decoded
+  payload.
 
 ## [0.2.0] - 2026-08-22
 

@@ -15,7 +15,7 @@ Raycast commands for the [VanillaShot](../README.md) screenshot and screen memor
 No port, no daemon, no token file:
 
 - **Actions** go through the `vanillashot://` URL scheme. Any command that changes state
-  is one of a fixed set of verbs handled in `src-tauri/src/lib.rs`; the scheme
+  is one of a fixed set of verbs handled in `src-tauri/src/lib.rs`. The scheme
   accepts no paths or payloads, so nothing else on the machine can steer VanillaShot
   through it. Opening a link launches VanillaShot if it is not already running.
 - **Search** reads `~/Library/Application Support/com.hackjitsu.vanillashot/memory.db` directly, read-only, via
@@ -24,7 +24,7 @@ No port, no daemon, no token file:
 ## Requirements
 
 - VanillaShot installed (the `vanillashot://` scheme is registered by the app bundle, so a
-  `tauri dev` process is not enough — build and install the app once).
+  `tauri dev` process is not enough, build and install the app once).
 - A `sqlite3` binary on Raycast's PATH. `useSQL` spawns it with `--readonly`.
   If that binary lacks the `fts5` module, search automatically falls back to a
   `LIKE` scan, which is slower on large histories but returns the same rows.

@@ -917,7 +917,7 @@
 
 /* Decoded codes float beside the capture instead of inflating the bottom bar. */
 
-/* OCR text panel — floats top-left of the canvas, mirroring the codes panel. */
+/* OCR text panel, floats top-left of the canvas, mirroring the codes panel. */
 .quick-inline-panel.quick-ocr-float {
   position: absolute;
   top: 72px;

@@ -43,7 +43,7 @@ const MAX_SYMBOLS = 16
 
 /**
  * Padding added around the decoded quiet zone when a code is masked. ZXing
- * reports the finder-pattern corners, which sit inside the printed module grid;
+ * reports the finder-pattern corners, which sit inside the printed module grid.
  * without the margin a blackout leaves a readable border of the symbol behind.
  */
 const MASK_PADDING_RATIO = 0.08

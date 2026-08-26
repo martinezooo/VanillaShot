@@ -19,7 +19,7 @@ const CREAM = "#f4e2b6";
 const AMBER = "#ffb23a";
 const AMBER_DEEP = "#e2890f";
 
-// Viewfinder frame — a large centred square of corner brackets.
+// Viewfinder frame: a large centred square of corner brackets.
 const FRAME = 312;        // distance from centre to each bracket corner
 const ARM = 150;          // bracket arm length
 const STROKE = 40;
@@ -39,9 +39,9 @@ const brackets = [
   bracket(R, B, -1, -1),
 ].join("\n    ");
 
-// Vanilla bloom — five petals swept around the centre. A thin dark gap between
+// Vanilla bloom: five petals swept around the centre. A thin dark gap between
 // petals (via the tile-coloured stroke) keeps them from merging into a disc at
-// small sizes; the amber centre stays a distinct focal point either way.
+// small sizes. The amber centre stays a distinct focal point either way.
 const PETAL_RX = 68;
 const PETAL_RY = 138;
 const PETAL_OFFSET = 118;

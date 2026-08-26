@@ -1,6 +1,6 @@
 # Third-party notices
 
-VanillaShot is released under the MIT licence; see [LICENSE](LICENSE).
+VanillaShot is released under the MIT licence. See [LICENSE](LICENSE).
 
 This file lists the third-party components redistributed inside the shipped
 application bundle, together with the licence each one is used under. It
@@ -30,10 +30,10 @@ Five MPL-2.0 crates are linked into the macOS binary:
 | `dtoa-short` | 0.3.5 | `cssparser` | https://github.com/upsuper/dtoa-short |
 
 MPL-2.0 is file-level (weak) copyleft. Section 3.3 of the licence permits
-the Larger Work — VanillaShot as a whole — to be distributed under other
+the Larger Work, meaning VanillaShot as a whole, to be distributed under other
 terms, including MIT, provided the MPL-covered files themselves stay under
 MPL-2.0 and recipients are told where to obtain their source. None of these
-five crates has been modified by this project; unmodified source for each is
+five crates has been modified by this project. Unmodified source for each is
 available at the upstream URL above and on crates.io. The full licence text
 is at https://mozilla.org/MPL/2.0/.
 
@@ -77,7 +77,7 @@ Feross Aboukhadijeh), `regenerator-runtime` (MIT, Facebook), and `zlib.js`
 
 `zxing-wasm` is imported as `zxing-wasm/reader`, and the reader WASM binary
 is bundled locally via `import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'`.
-The zxing-wasm wrapper itself is MIT (listed further down); the decoding
+The zxing-wasm wrapper itself is MIT (listed further down). The decoding
 engine compiled into the binary is ZXing-C++ under Apache-2.0. The `zint`
 writer library (BSD-3-Clause) is part of the zxing-wasm writer build only
 and is not present in the reader binary this app ships.
@@ -123,7 +123,7 @@ full text is reproduced near the end of this file.
 
 See the copyleft summary at the top of this file for the full list, the
 dependency paths, and the obligations. The licence text is not reproduced
-here; it is available at https://mozilla.org/MPL/2.0/, and unmodified
+here. It is available at https://mozilla.org/MPL/2.0/, and unmodified
 source for each crate is available from its upstream repository and from
 crates.io.
 
@@ -154,7 +154,7 @@ The Unicode Licence V3 text is reproduced near the end of this file.
 
 `moxcms` 0.7.11 and `pxfm` 0.1.28 offer "BSD-3-Clause OR Apache-2.0" and
 `zerocopy` / `zerocopy-derive` 0.8.40 offer "BSD-2-Clause OR Apache-2.0 OR
-MIT"; those are taken under Apache-2.0 and MIT respectively.
+MIT". Those are taken under Apache-2.0 and MIT respectively.
 
 The BSD-3-Clause text is reproduced near the end of this file.
 
@@ -166,14 +166,14 @@ The BSD-3-Clause text is reproduced near the end of this file.
 
 `rusqlite` is used with its `bundled` feature, so the SQLite amalgamation is
 compiled into the binary rather than linked against a system library. SQLite
-itself is dedicated to the public domain and requires no attribution; it is
+itself is dedicated to the public domain and requires no attribution. It is
 listed here for completeness.
 
 ## MIT and ISC components
 
 Their notice requirement is satisfied by naming them together with the
 standard permission notice. One representative MIT text and the ISC text are
-reproduced near the end of this file; each project's own copyright line is
+reproduced near the end of this file. Each project's own copyright line is
 in its upstream repository.
 
 ### JavaScript, bundled into `dist/`
@@ -236,7 +236,7 @@ Significant transitive crates in the same family:
 The shipped Rust tree is 273 crates. 245 of those are available under MIT
 and/or Apache-2.0 (some also offering Zlib, 0BSD, Unlicense, or CC0), 18 are
 Unicode-3.0, 5 are MPL-2.0, 4 are BSD-family, and 1 (`tao`) is Apache-2.0
-alone. The complete list, with exact versions, is `src-tauri/Cargo.lock`;
+alone. The complete list, with exact versions, is in `src-tauri/Cargo.lock`.
 it can be regenerated with:
 
 ```bash

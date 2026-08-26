@@ -115,7 +115,7 @@ const FrameList = ({ databasePath }: { databasePath: string }) => {
   }
 
   const frames = data ?? [];
-  // /fts5/ is handled by falling back to LIKE; anything else is a real failure
+  // /fts5/ is handled by falling back to LIKE. Anything else is a real failure
   // and should be shown, not hidden behind an empty "no frames" state.
   const hardError = error && !/fts5/i.test(error.message) ? error : null;
 
