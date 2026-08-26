@@ -13,7 +13,9 @@ the moment you let go of the mouse. Everything else in the app exists to save
 you a step: dictate a note instead of typing it, copy text straight out of an
 image, or find a screen you saw an hour ago.
 
-Free and open source, and it stays that way.
+Open source, and built to stay small. The native core is Rust, the interface
+runs on the system WebView rather than a bundled browser, and the whole app is
+27 MB.
 
 Author: martinezooo, hack-jitsu.com
 

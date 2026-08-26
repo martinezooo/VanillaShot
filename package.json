@@ -45,7 +45,7 @@
     "vite": "^7.3.1",
     "vitest": "^4.0.0"
   },
-  "description": "Fast, free screenshot tool for macOS with a rich on-the-spot editor, voice notes, OCR and searchable screen history. Local-first, no account, no upload.",
+  "description": "Fast, simple screenshot tool for macOS with a rich on-the-spot editor, voice notes, OCR and searchable screen history. Native core in Rust, nothing uploaded.",
   "license": "MIT",
   "repository": {
     "type": "git",
