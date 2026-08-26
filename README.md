@@ -19,8 +19,8 @@ runs on the system WebView rather than a bundled browser, and the whole app is
 
 Author: martinezooo, hack-jitsu.com
 
-> **Status: pre-1.0.** macOS only, Apple silicon only, and there is no signed
-> download. You build it from source.
+> **Status: pre-1.0.** macOS only, Apple silicon only. The download is not
+> notarised, so macOS asks once before it will open. See below.
 
 ## Contents
 
@@ -198,9 +198,25 @@ curl https://sh.rustup.rs -sSf | sh
 
 ## Install
 
-There is no signed or notarised download. A build made without an Apple
-Developer ID certificate is blocked by Gatekeeper, so posting a DMG would only
-teach people to click past security warnings. Build it yourself:
+Download the DMG from the [latest release](https://github.com/martinezooo/VanillaShot/releases/latest),
+open it, and drag VanillaShot to Applications.
+
+**macOS will refuse to open it the first time.** The build is signed, but not
+with an Apple Developer ID certificate, which costs 99 dollars a year and this
+project does not have one. Gatekeeper treats anything else as unidentified. To
+open it anyway:
+
+1. Right-click VanillaShot in Applications and choose **Open**.
+2. Click **Open** in the dialog that appears.
+
+You only do this once. macOS remembers the choice. If you prefer the terminal,
+`xattr -dr com.apple.quarantine /Applications/VanillaShot.app` does the same
+thing.
+
+The release notes carry a SHA-256 for the DMG if you want to check what you
+downloaded.
+
+### Or build it yourself
 
 ```bash
 git clone https://github.com/martinezooo/VanillaShot.git
@@ -211,12 +227,14 @@ npm run install:local
 
 That builds the app, signs it with a certificate from your keychain, and
 installs it to `/Applications/VanillaShot.app`. A free Apple Development
-certificate from Xcode is enough.
+certificate from Xcode is enough. Expect the first build to take a while, since
+it compiles the full Rust dependency tree.
 
-The signing step matters. An ad-hoc signature carries no certificate, so macOS
-identifies the app by its code hash, and every rebuild looks like a new app that
-has to be granted Screen Recording again. Set `VANILLASHOT_SIGN_IDENTITY` if the
-script picks the wrong certificate.
+Building is worth it if you plan to rebuild often. An ad-hoc signature carries
+no certificate, so macOS identifies the app by its code hash and every rebuild
+looks like a new app that has to be granted Screen Recording again. A keychain
+certificate keeps the permission. Set `VANILLASHOT_SIGN_IDENTITY` if the script
+picks the wrong one.
 
 ## Permissions
 

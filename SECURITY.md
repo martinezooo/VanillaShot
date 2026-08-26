@@ -64,8 +64,8 @@ before sharing it.
 
 ## Out of scope
 
-The absence of code signing and notarisation. This is known and documented.
-Builds are ad-hoc signed and meant to be built from source.
+The absence of Apple notarisation. This is known and documented. The published
+DMG is signed but not notarised, so macOS asks before opening it once.
 
 Anything that requires an attacker who already has code execution as the user,
 for reading the screen-memory store. See above.
