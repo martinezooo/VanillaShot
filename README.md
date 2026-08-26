@@ -1,6 +1,6 @@
 <p align="center">
   <img src="docs/hero.png" width="840"
-       alt="VanillaShot. A captured .env file with four secret values blacked out.">
+       alt="VanillaShot. A captured log opened in the editor, with a line boxed in amber, an arrow and a label pointing at it, and one value blacked out.">
 </p>
 
 # VanillaShot
