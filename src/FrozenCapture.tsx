@@ -139,7 +139,18 @@ export default function FrozenCapture() {
         return
       }
 
-      const scale = payload.scaleFactor || 1
+      // Measure the ratio instead of trusting a number from the backend.
+      //
+      // The window toolkit, the display server and the webview disagree about
+      // what a pixel is once two displays have different backing scales: the
+      // overlay can report a device pixel ratio of 2 while sitting on a 1x
+      // screen, and its CSS width matches neither the point size nor the pixel
+      // size of the display. The one relationship that always holds is that the
+      // still spans exactly the width of the overlay, so dividing gives the
+      // image pixels per CSS pixel for this display, whatever the toolkit
+      // believes.
+      const measured = window.innerWidth > 0 ? payload.width / window.innerWidth : 0
+      const scale = measured > 0 ? measured : payload.scaleFactor || 1
       const sx = Math.round(rect.x * scale)
       const sy = Math.round(rect.y * scale)
       const sw = Math.round(rect.width * scale)
@@ -254,7 +265,8 @@ export default function FrozenCapture() {
     return <div className="frozen-root frozen-blank" />
   }
 
-  const scale = payload.scaleFactor || 1
+  const scale =
+    window.innerWidth > 0 ? payload.width / window.innerWidth : payload.scaleFactor || 1
   const badge = selection
     ? `${Math.round(selection.width * scale)} × ${Math.round(selection.height * scale)}`
     : null

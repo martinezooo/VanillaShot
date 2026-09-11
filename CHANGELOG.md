@@ -4,6 +4,31 @@ All notable changes to VanillaShot are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-09-11
+
+Multi-monitor fixes. Capture was unreliable as soon as a second display with a
+different scale factor was attached.
+
+### Fixed
+
+- Capture ignored the display the pointer was on and used the built-in screen
+  instead. The pointer and the monitor list were read from the window toolkit,
+  which reports each monitor's origin scaled by that monitor's own backing
+  factor but the pointer scaled by the main display's. With a 2x laptop beside a
+  1x external screen the two never agree, so the hit test always fell through to
+  the main display. Both are now read from Core Graphics, in points, which is
+  also the space the screen grab itself uses.
+- The overlay covered only part of a wide display, or spilled past the screen it
+  was on. Frames given to the toolkit are converted through the scale factor of
+  the monitor the window is on at that moment, not the one it is moving to, so
+  the frame was wrong by a factor of two in one direction or the other. The
+  overlay is now placed through AppKit, in points, with no conversion.
+- Selections came out at half resolution on a Retina display. The crop factor
+  was taken from a number supplied by the backend, which disagreed with what the
+  overlay actually measured. It is now derived from the overlay itself, by
+  dividing the still's width by the overlay's width, so it is correct on any
+  display without either side having to agree in advance.
+
 ## [0.2.1] - 2026-08-22
 
 Security and stability fixes.

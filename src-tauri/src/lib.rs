@@ -561,39 +561,206 @@ fn hide_main_window<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
     }
 }
 
-/// Computes a monitor's logical bounds (points), used for both the screencapture
-/// region and the overlay window placement.
+/// Geometry of one display, in the coordinate space `screencapture -R` uses.
+///
+/// `bounds` is in global points with the main display's top-left at the origin,
+/// which is what CoreGraphics reports and what the screencapture region flag
+/// expects. `native` is the pixel size of the same display.
 #[cfg(target_os = "macos")]
-fn monitor_logical_bounds<R: tauri::Runtime>(
-    app_handle: &tauri::AppHandle<R>,
-    cursor: Option<&DesktopCursorPoint>,
-) -> Result<(f64, f64, f64, f64, f64), CaptureError> {
-    let monitors = app_handle
-        .available_monitors()
-        .map_err(|e| CaptureError::failed(format!("Could not inspect monitors: {e}")))?;
-    let mut chosen = app_handle
-        .primary_monitor()
-        .map_err(|e| CaptureError::failed(format!("Could not inspect primary monitor: {e}")))?;
+#[derive(Debug, Clone, Copy)]
+struct DisplayGeometry {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    scale: f64,
+}
 
-    if let Some(cursor) = cursor {
-        if let Some(found) = monitors.iter().find(|m| {
-            let x = f64::from(m.position().x);
-            let y = f64::from(m.position().y);
-            let w = f64::from(m.size().width);
-            let h = f64::from(m.size().height);
-            cursor.x >= x && cursor.x < x + w && cursor.y >= y && cursor.y < y + h
-        }) {
-            chosen = Some(found.clone());
-        }
+/// Finds the display the pointer is on, asking CoreGraphics rather than the
+/// window toolkit.
+///
+/// The toolkit reports each monitor's origin scaled by that monitor's own
+/// backing factor, while the pointer comes back scaled by the main display's
+/// factor. On a mixed-DPI setup, a 2x laptop next to a 1x ultrawide, those two
+/// spaces disagree and every hit test lands on the main display. CoreGraphics
+/// reports both in global points, so they agree by construction, and it is the
+/// same space `screencapture -R` reads.
+#[cfg(target_os = "macos")]
+fn display_under_pointer() -> Option<DisplayGeometry> {
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGSize {
+        width: f64,
+        height: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGRect {
+        origin: CGPoint,
+        size: CGSize,
     }
 
-    let monitor = chosen.ok_or_else(|| CaptureError::failed("No monitor available for capture"))?;
-    let scale = monitor.scale_factor();
-    let x = f64::from(monitor.position().x) / scale;
-    let y = f64::from(monitor.position().y) / scale;
-    let w = f64::from(monitor.size().width) / scale;
-    let h = f64::from(monitor.size().height) / scale;
-    Ok((x, y, w, h, scale))
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventCreate(source: *const std::ffi::c_void) -> *mut std::ffi::c_void;
+        fn CGEventGetLocation(event: *mut std::ffi::c_void) -> CGPoint;
+        fn CGGetActiveDisplayList(max: u32, displays: *mut u32, count: *mut u32) -> i32;
+        fn CGDisplayBounds(display: u32) -> CGRect;
+        fn CGMainDisplayID() -> u32;
+        fn CGDisplayCopyDisplayMode(display: u32) -> *mut std::ffi::c_void;
+        fn CGDisplayModeGetPixelWidth(mode: *mut std::ffi::c_void) -> usize;
+        fn CGDisplayModeRelease(mode: *mut std::ffi::c_void);
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFRelease(cf: *mut std::ffi::c_void);
+    }
+
+    unsafe {
+        let event = CGEventCreate(std::ptr::null());
+        if event.is_null() {
+            return None;
+        }
+        let pointer = CGEventGetLocation(event);
+        CFRelease(event);
+
+        let mut count: u32 = 0;
+        if CGGetActiveDisplayList(0, std::ptr::null_mut(), &mut count) != 0 || count == 0 {
+            return None;
+        }
+        let mut ids = vec![0u32; count as usize];
+        if CGGetActiveDisplayList(count, ids.as_mut_ptr(), &mut count) != 0 {
+            return None;
+        }
+
+        let describe = |id: u32| -> Option<DisplayGeometry> {
+            let b = CGDisplayBounds(id);
+            if b.size.width <= 0.0 || b.size.height <= 0.0 {
+                return None;
+            }
+            let mode = CGDisplayCopyDisplayMode(id);
+            if mode.is_null() {
+                return None;
+            }
+            let native_width = CGDisplayModeGetPixelWidth(mode) as u32;
+            CGDisplayModeRelease(mode);
+            Some(DisplayGeometry {
+                x: b.origin.x,
+                y: b.origin.y,
+                width: b.size.width,
+                height: b.size.height,
+                scale: f64::from(native_width) / b.size.width,
+            })
+        };
+
+        for id in ids.iter().copied() {
+            let b = CGDisplayBounds(id);
+            if pointer.x >= b.origin.x
+                && pointer.x < b.origin.x + b.size.width
+                && pointer.y >= b.origin.y
+                && pointer.y < b.origin.y + b.size.height
+            {
+                return describe(id);
+            }
+        }
+
+        // Pointer between displays or unreadable: the main display is the least
+        // surprising place to put the overlay.
+        describe(CGMainDisplayID())
+    }
+}
+
+/// Puts the overlay exactly over one display, using AppKit rather than the
+/// window toolkit.
+///
+/// The toolkit converts any frame it is given through the scale factor of the
+/// monitor the window currently sits on, not the one it is moving to. With a 2x
+/// laptop beside a 1x ultrawide that is wrong by a factor of two, which showed
+/// up as an overlay covering half the ultrawide, or spilling past the laptop
+/// screen, depending on which way the window was travelling. Correcting by the
+/// observed error does not converge either, because position and size are both
+/// converted and each move changes which monitor the next conversion uses.
+///
+/// AppKit frames are in points with no conversion, so the frame lands where it
+/// is put. The only adjustment needed is the flip from Core Graphics, which
+/// measures down from the top of the main display, to AppKit, which measures up
+/// from its bottom.
+#[cfg(target_os = "macos")]
+fn place_overlay_on_display(window: &WebviewWindow, display: &DisplayGeometry) -> bool {
+    let Some(primary_height) = primary_display_height_points() else {
+        return false;
+    };
+    // Core Graphics measures down from the top of the main display, AppKit
+    // measures up from its bottom.
+    let flipped_y = primary_height - display.y - display.height;
+    let frame = (display.x, flipped_y, display.width, display.height);
+
+    let window = window.clone();
+    // AppKit is main-thread only. Touching NSWindow from the capture task kills
+    // the process outright, which looked like the app silently doing nothing.
+    window
+        .clone()
+        .run_on_main_thread(move || {
+            use objc2_app_kit::NSWindow;
+            use objc2_foundation::{NSPoint, NSRect, NSSize};
+
+            let Ok(ptr) = window.ns_window() else {
+                return;
+            };
+            if ptr.is_null() {
+                return;
+            }
+            unsafe {
+                let ns_window = &*(ptr as *const NSWindow);
+                ns_window.setFrame_display(
+                    NSRect::new(NSPoint::new(frame.0, frame.1), NSSize::new(frame.2, frame.3)),
+                    true,
+                );
+            }
+        })
+        .is_ok()
+}
+
+/// Height of the main display in points, the reference AppKit measures from.
+#[cfg(target_os = "macos")]
+fn primary_display_height_points() -> Option<f64> {
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGSize {
+        width: f64,
+        height: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGRect {
+        origin: CGPoint,
+        size: CGSize,
+    }
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGMainDisplayID() -> u32;
+        fn CGDisplayBounds(display: u32) -> CGRect;
+    }
+    unsafe {
+        let b = CGDisplayBounds(CGMainDisplayID());
+        if b.size.height > 0.0 {
+            Some(b.size.height)
+        } else {
+            None
+        }
+    }
 }
 
 /// Grabs a still of the given display region (logical points) into a data URL.
@@ -684,16 +851,16 @@ fn start_frozen_capture(app_handle: tauri::AppHandle) {
             std::thread::sleep(Duration::from_millis(60));
         }
 
-        let bounds = monitor_logical_bounds(&app_handle, cursor.as_ref());
-        let (mx, my, mw, mh, scale) = match bounds {
-            Ok(v) => v,
-            Err(e) => {
-                let _ = app_handle.emit(CAPTURE_ERROR_EVENT, e);
-                return;
-            }
+        let Some(display) = display_under_pointer() else {
+            let _ = app_handle.emit(
+                CAPTURE_ERROR_EVENT,
+                CaptureError::failed("Could not find the display under the pointer"),
+            );
+            return;
         };
+        let scale = display.scale;
 
-        let still = capture_display_still(mx, my, mw, mh);
+        let still = capture_display_still(display.x, display.y, display.width, display.height);
         let (image_data_url, width, height) = match still {
             Ok(v) => v,
             Err(e) => {
@@ -721,10 +888,11 @@ fn start_frozen_capture(app_handle: tauri::AppHandle) {
         // stays hidden until its webview has painted the still and shows itself
         // via frozen_ready_to_show, so the user never sees a blank flash.
         if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
-            let _ = overlay.set_position(tauri::LogicalPosition::new(mx, my));
-            let _ = overlay.set_size(tauri::LogicalSize::new(mw, mh));
+            place_overlay_on_display(&overlay, &display);
             let _ = overlay.emit(FROZEN_PAYLOAD_EVENT, payload.clone());
-        } else if let Err(e) = build_frozen_overlay(&app_handle, mx, my, mw, mh) {
+        } else if let Err(e) = {
+            build_frozen_overlay(&app_handle, &display)
+        } {
             show_main_window(&app_handle);
             let _ = app_handle.emit(
                 CAPTURE_ERROR_EVENT,
@@ -740,10 +908,7 @@ fn start_frozen_capture(app_handle: tauri::AppHandle) {
 #[cfg(target_os = "macos")]
 fn build_frozen_overlay(
     app_handle: &tauri::AppHandle,
-    mx: f64,
-    my: f64,
-    mw: f64,
-    mh: f64,
+    display: &DisplayGeometry,
 ) -> tauri::Result<()> {
     let mut builder = WebviewWindowBuilder::new(
         app_handle,
@@ -751,8 +916,8 @@ fn build_frozen_overlay(
         WebviewUrl::default(),
     )
     .title("VanillaShot Capture")
-    .inner_size(mw, mh)
-    .position(mx, my)
+    .inner_size(display.width, display.height)
+    .position(display.x, display.y)
     .resizable(false)
     .decorations(false)
     .always_on_top(true)
@@ -766,7 +931,13 @@ fn build_frozen_overlay(
     .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled);
 
     builder = builder.visible_on_all_workspaces(true);
-    builder.build()?;
+    let window = builder.build()?;
+
+    // The builder takes logical units, which means it applies a scale factor of
+    // its own choosing. On a mixed-DPI desktop that lands the overlay on the
+    // wrong display, or covering part of the right one. Restate the frame in
+    // physical units, which is the space available_monitors reported it in.
+    place_overlay_on_display(&window, display);
     Ok(())
 }
 
@@ -780,8 +951,8 @@ fn prewarm_frozen_overlay(app_handle: &tauri::AppHandle) {
     {
         return;
     }
-    if let Ok((mx, my, mw, mh, _)) = monitor_logical_bounds(app_handle, None) {
-        let _ = build_frozen_overlay(app_handle, mx, my, mw, mh);
+    if let Some(display) = display_under_pointer() {
+        let _ = build_frozen_overlay(app_handle, &display);
     }
 }
 
@@ -798,7 +969,7 @@ fn frozen_ready_to_show(app_handle: tauri::AppHandle) {
 
 #[tauri::command]
 fn take_pending_frozen_capture(
-    window: WebviewWindow,
+    #[allow(unused_variables)] window: WebviewWindow,
     state: tauri::State<'_, PendingFrozenCaptureState>,
 ) -> Result<Option<FrozenCapturePayload>, CaptureError> {
     if window.label() != CAPTURE_OVERLAY_WINDOW_LABEL {
