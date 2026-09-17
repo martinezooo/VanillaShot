@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import FrozenCapture from './FrozenCapture.tsx'
+import { installGlobalErrorLogging } from './lib/diagnostics'
 
 const CAPTURE_OVERLAY_LABEL = 'capture-overlay'
 
@@ -19,6 +20,9 @@ const currentWindowLabel = (): string => {
 }
 
 const isOverlay = currentWindowLabel() === CAPTURE_OVERLAY_LABEL
+
+// Before the first render, so a crash on the way up is on the record too.
+installGlobalErrorLogging(isOverlay ? 'overlay' : 'app')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>{isOverlay ? <FrozenCapture /> : <App />}</StrictMode>,

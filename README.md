@@ -253,6 +253,10 @@ note.
 Screenshots land in `~/Pictures` as `vanilla-shot-<pid>-<timestamp>.png`. The
 folder is shown in Settings. A note is saved as a `.txt` file next to its image.
 
+Logs go to `~/Library/Logs/com.hackjitsu.vanillashot/`. Every capture records
+what it did, which is what to attach to a bug report. Settings has the path and
+a button to copy the recent lines. Set `VANILLASHOT_LOG=debug` for more detail.
+
 ## Keyboard shortcuts
 
 | Key | Action |

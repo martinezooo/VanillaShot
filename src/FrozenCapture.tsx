@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { describeError, logError, logInfo, logWarn } from './lib/diagnostics'
 import './FrozenCapture.css'
 
 // The backend pushes each capture's frozen still on this event, so the overlay
@@ -56,20 +57,55 @@ export default function FrozenCapture() {
     setError(null)
     setPayload(next)
 
+    // Everything needed to explain a wrong-sized or wrong-screen capture, in
+    // one line: what the backend grabbed, and what this window thinks it is.
+    // These two disagreeing is the whole multi-monitor bug class.
+    const measured = window.innerWidth > 0 ? next.width / window.innerWidth : 0
+    logInfo('overlay', 'Still received', {
+      still: `${next.width}x${next.height}`,
+      backendScale: next.scaleFactor,
+      overlay: `${window.innerWidth}x${window.innerHeight}`,
+      dpr: window.devicePixelRatio,
+      measuredScale: measured,
+      screen: `${window.screen.width}x${window.screen.height}`,
+    })
+    if (window.innerWidth === 0 || window.innerHeight === 0) {
+      logError('overlay', 'Overlay has no size, so the selection cannot be mapped onto the still')
+    } else if (measured > 0 && Math.abs(measured - next.scaleFactor) > 0.01) {
+      // Not fatal: the measured value is the one used. It does mean the window
+      // is not the size the backend placed it at, which is the half-covered
+      // display showing up before the user sees it.
+      logWarn('overlay', 'Overlay size disagrees with the display the still came from', {
+        measuredScale: measured,
+        backendScale: next.scaleFactor,
+        expectedOverlayWidth: next.width / next.scaleFactor,
+        actualOverlayWidth: window.innerWidth,
+      })
+    }
+
     // Reveal once the still has decoded. No requestAnimationFrame here:
     // the window is still hidden and rAF is paused while hidden, so gating the
     // reveal on it would deadlock (the window can never show). decode() runs off
     // the compositor and resolves while hidden. A timeout backstops a stuck decode.
     let revealed = false
-    const reveal = () => {
+    const reveal = (via: string) => {
       if (revealed) return
       revealed = true
-      void invoke('frozen_ready_to_show').catch(() => {})
+      logInfo('overlay', `Revealing via ${via}`)
+      void invoke('frozen_ready_to_show').catch((err) => {
+        logError('overlay', `Could not ask to be shown: ${describeError(err)}`)
+      })
     }
     const probe = new Image()
     probe.src = next.imageDataUrl
-    void probe.decode().then(reveal).catch(reveal)
-    window.setTimeout(reveal, 250)
+    void probe
+      .decode()
+      .then(() => reveal('decode'))
+      .catch((err) => {
+        logWarn('overlay', `Still did not decode, revealing anyway: ${describeError(err)}`)
+        reveal('decode-failed')
+      })
+    window.setTimeout(() => reveal('timeout'), 250)
   }, [])
 
   useEffect(() => {
@@ -96,20 +132,29 @@ export default function FrozenCapture() {
         return
       }
 
-      // Warm path: the backend pushes each capture's still as an event.
-      unlisten = await listen<FrozenPayload>(FROZEN_PAYLOAD_EVENT, (event) => {
-        if (!cancelled) {
-          applyPayload(event.payload)
-        }
-      })
+      // Warm path: the backend pushes each capture's still as an event. If this
+      // subscription never lands, every later capture is handed to nobody and
+      // the overlay stays hidden with no other sign.
+      try {
+        unlisten = await listen<FrozenPayload>(FROZEN_PAYLOAD_EVENT, (event) => {
+          if (!cancelled) {
+            applyPayload(event.payload)
+          }
+        })
+        logInfo('overlay', 'Listening for stills')
+      } catch (err) {
+        logError('overlay', `Could not listen for stills: ${describeError(err)}`)
+      }
 
       // Cold path: a still already waiting when this window mounted.
       try {
         const result = await invoke<FrozenPayload | null>('take_pending_frozen_capture')
         if (!cancelled && result) {
+          logInfo('overlay', 'Picked up a still that was already waiting')
           applyPayload(result)
         }
       } catch (err) {
+        logError('overlay', `Could not take the pending still: ${describeError(err)}`)
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Could not load the capture.')
         }
@@ -129,7 +174,9 @@ export default function FrozenCapture() {
     }
     committedRef.current = true
     if (isTauri()) {
-      await invoke('cancel_frozen_capture').catch(() => {})
+      await invoke('cancel_frozen_capture').catch((err) => {
+        logError('overlay', `Could not cancel: ${describeError(err)}`)
+      })
     }
   }, [])
 
@@ -155,7 +202,23 @@ export default function FrozenCapture() {
       const sy = Math.round(rect.y * scale)
       const sw = Math.round(rect.width * scale)
       const sh = Math.round(rect.height * scale)
+
+      logInfo('overlay', 'Selection', {
+        rect: `${Math.round(rect.width)}x${Math.round(rect.height)} at ${Math.round(rect.x)},${Math.round(rect.y)}`,
+        scale,
+        crop: `${sw}x${sh} at ${sx},${sy}`,
+        still: `${payload.width}x${payload.height}`,
+      })
+      // A crop that runs past the still means the selection was mapped with the
+      // wrong scale, which is the half-a-display bug reaching the output.
+      if (sx + sw > payload.width || sy + sh > payload.height) {
+        logError('overlay', 'Crop runs past the still, so the result will be clipped', {
+          crop: `${sx + sw}x${sy + sh}`,
+          still: `${payload.width}x${payload.height}`,
+        })
+      }
       if (sw < 1 || sh < 1) {
+        logWarn('overlay', 'Selection is empty after scaling, nothing to crop')
         return
       }
 
@@ -163,13 +226,17 @@ export default function FrozenCapture() {
 
       const source = new Image()
       source.src = payload.imageDataUrl
-      await source.decode().catch(() => {})
+      await source.decode().catch((err) => {
+        // Drawing an undecoded image gives a blank crop rather than an error.
+        logError('overlay', `Still did not decode for cropping: ${describeError(err)}`)
+      })
 
       const canvas = document.createElement('canvas')
       canvas.width = sw
       canvas.height = sh
       const ctx = canvas.getContext('2d')
       if (!ctx) {
+        logError('overlay', `No 2D context for a ${sw}x${sh} canvas, capture dropped`)
         committedRef.current = false
         return
       }
@@ -184,6 +251,7 @@ export default function FrozenCapture() {
       }
 
       await invoke('finish_frozen_capture', { dataUrl, cursor: payload.cursor }).catch((err) => {
+        logError('overlay', `Could not hand the crop to the editor: ${describeError(err)}`)
         committedRef.current = false
         setError(err instanceof Error ? err.message : 'Could not open the editor.')
       })

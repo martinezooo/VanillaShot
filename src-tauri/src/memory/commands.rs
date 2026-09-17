@@ -183,7 +183,9 @@ pub async fn memory_open_path_in_finder(path: String) -> Result<String, MemoryEr
 
     #[cfg(target_os = "macos")]
     {
-        let status = std::process::Command::new("open")
+        // Absolute path, not a PATH lookup: the security notes promise both
+        // opener call sites are fixed, and this is one of them.
+        let status = std::process::Command::new("/usr/bin/open")
             .arg(&open_target)
             .status()
             .map_err(|e| format!("Could not open Finder: {e}"))?;

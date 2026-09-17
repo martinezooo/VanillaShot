@@ -39,5 +39,5 @@ tauri-plugin-global-shortcut = "2"
 # exactly on one display when displays have different backing scales.
 [target."cfg(target_os = \"macos\")".dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSResponder"] }
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSResponder", "NSScreen"] }
 objc2-foundation = "0.3"

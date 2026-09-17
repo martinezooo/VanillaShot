@@ -40,6 +40,15 @@ import {
   type DesktopCursorPoint,
 } from './lib/capture'
 import { scanCodesFromImage, type CodeRect, type DetectedCode } from './lib/codes'
+import {
+  describeError,
+  getDiagnosticsInfo,
+  logError,
+  logInfo,
+  logWarn,
+  readRecentLog,
+  type DiagnosticsInfo,
+} from './lib/diagnostics'
 import { flagLineTokens } from './lib/sensitive'
 import {
   getMemoryFrame,
@@ -965,6 +974,11 @@ function App() {
   const [memoryTimelineFrames, setMemoryTimelineFrames] = useState<MemoryFrame[]>([])
   const [screenRecordingGranted, setScreenRecordingGranted] = useState<boolean | null>(null)
   const [captureDir, setCaptureDir] = useState<string | null>(null)
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsInfo | null>(null)
+  // The cold hand-off happens once per window. Later captures arrive as events,
+  // so re-running the bootstrap finds an empty slot and that is not a fault.
+  const quickBootstrapRanRef = useRef(false)
+  const [diagnosticsNotice, setDiagnosticsNotice] = useState<string | null>(null)
   const [memoryNotice, setMemoryNotice] = useState<{ tone: 'ok' | 'error'; detail: string } | null>(null)
   const [memoryCountdownValue, setMemoryCountdownValue] = useState<number | null>(null)
   const [memoryRecordingElapsedSecs, setMemoryRecordingElapsedSecs] = useState(0)
@@ -1240,6 +1254,7 @@ function App() {
       ])
       setScreenRecordingGranted(granted)
       setCaptureDir(dir)
+      setDiagnostics(await getDiagnosticsInfo())
     } catch {
       // Leaving the state null renders the status as unknown rather than lying.
       setScreenRecordingGranted(null)
@@ -1265,6 +1280,22 @@ function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not open the project page'
       setMemoryNotice({ tone: 'error', detail: message })
+    }
+  }, [])
+
+  // The log is only useful if it can be handed over. Copying the tail puts a
+  // report on the clipboard without the user having to find the file first.
+  const handleCopyLog = useCallback(async () => {
+    try {
+      const text = await readRecentLog(400)
+      if (!text.trim()) {
+        setDiagnosticsNotice('The log is empty. Take a screenshot and try again.')
+        return
+      }
+      await navigator.clipboard.writeText(text)
+      setDiagnosticsNotice(`Copied the last ${text.split('\n').length} lines.`)
+    } catch (error) {
+      setDiagnosticsNotice(describeError(error))
     }
   }, [])
 
@@ -1422,22 +1453,43 @@ function App() {
       return
     }
 
+    if (quickBootstrapRanRef.current) {
+      return
+    }
+    quickBootstrapRanRef.current = true
+
     let cancelled = false
 
     const bootstrapQuickCapture = async () => {
       try {
+        // Cold start: this window was built for a capture that is already
+        // waiting. Nothing else records this hand-off, and a capture lost here
+        // looks exactly like one that was never taken.
         const pendingCapture = await takePendingQuickCapture()
-        if (!pendingCapture || cancelled) {
+        if (!pendingCapture) {
+          // The main window runs this too and always comes back empty, because
+          // the backend hands a pending capture only to the editor window. An
+          // empty slot matters only in the window the capture was meant for.
+          if (isDedicatedQuickWindow) {
+            logWarn('editor', 'Editor window booted but its capture was not waiting for it')
+          }
+          return
+        }
+        if (cancelled) {
+          logWarn('editor', 'Editor was torn down before it could collect the capture')
           return
         }
 
+        logInfo('editor', 'Capture collected on a cold start')
         setCurrentWindowLabel(QUICK_EDITOR_WINDOW_LABEL)
         setErrorMessage('')
         await loadImageFromDataUrl(pendingCapture.dataUrl, {
           openQuickEditor: true,
           cursor: pendingCapture.cursor ?? null,
         })
+        logInfo('editor', 'Capture shown in the editor')
       } catch (error) {
+        logError('editor', `Cold start failed: ${describeError(error)}`)
         if (cancelled) {
           return
         }
@@ -1452,7 +1504,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [loadImageFromDataUrl])
+  }, [isDedicatedQuickWindow, loadImageFromDataUrl])
 
   const handleFileSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1504,6 +1556,7 @@ function App() {
       }
 
       const message = error instanceof Error ? error.message : 'Screen capture failed'
+      logError('capture', describeError(error))
       setErrorMessage(message)
     }
   }, [isDedicatedQuickWindow, loadImageFromDataUrl])
@@ -1546,12 +1599,14 @@ function App() {
           }
 
           setErrorMessage('')
+          logInfo('editor', 'Capture arrived in the editor')
           void loadImageFromDataUrl(result.dataUrl, {
             openQuickEditor: true,
             cursor: result.cursor ?? null,
             preserveWindowPlacement: true,
           }).catch((error) => {
             const message = error instanceof Error ? error.message : 'Could not refresh quick editor'
+            logError('editor', describeError(error))
             setErrorMessage(message)
           })
         })
@@ -1567,6 +1622,7 @@ function App() {
           setErrorMessage('')
           void openQuickCaptureWindow(result).catch((error) => {
             const message = error instanceof Error ? error.message : 'Could not open quick editor'
+            logError('editor', describeError(error))
             setErrorMessage(message)
           })
         },
@@ -3158,6 +3214,7 @@ function App() {
       }
 
       const message = error instanceof Error ? error.message : 'Barcode scan failed'
+      logError('codes', describeError(error))
       setDetectedCodes([])
       setCodeScanError(message)
     } finally {
@@ -4332,6 +4389,45 @@ function App() {
               </button>
             </div>
           </section>
+
+          <h2 className="settings-section-title">Diagnostics</h2>
+          <section className="settings-group">
+            <div className="settings-row settings-row-stacked">
+              <span className="settings-row-label">
+                Log file
+                <span className="settings-row-path">{diagnostics?.logPath ?? 'Available in the desktop app'}</span>
+              </span>
+              <span className="settings-row-trailing">
+                <button
+                  className="settings-button"
+                  onClick={() => void handleCopyLog()}
+                  type="button"
+                  disabled={!diagnostics?.logPath}
+                >
+                  Copy Recent
+                </button>
+                <button
+                  className="settings-button"
+                  onClick={() => void handleRevealPath(diagnostics?.logPath ?? '')}
+                  type="button"
+                  disabled={!diagnostics?.logPath}
+                >
+                  Show
+                </button>
+              </span>
+            </div>
+            {diagnosticsNotice && (
+              <div className="settings-row">
+                <span className="settings-row-value">{diagnosticsNotice}</span>
+              </div>
+            )}
+          </section>
+          <p className="settings-footnote">
+            Every capture writes what it did to this file: which display it picked, how big the
+            image came back, and anything that failed. Attach it to a bug report. It stays on your
+            machine and is never sent anywhere. Run the app with VANILLASHOT_LOG=debug for more
+            detail.
+          </p>
 
           <h2 className="settings-section-title">About</h2>
           <section className="settings-group">

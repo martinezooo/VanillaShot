@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+mod diag;
 mod memory;
 
 #[allow(dead_code)] // used only by the non-macOS capture path
@@ -48,6 +49,18 @@ struct FrozenCapturePayload {
 struct PendingFrozenCaptureState {
     payload: Mutex<Option<FrozenCapturePayload>>,
 }
+
+/// Counts captures, so the watchdog can tell "the overlay never appeared" from
+/// "the overlay appeared and the user was quick".
+///
+/// Asking the window whether it is visible cannot tell those apart: a finished
+/// or cancelled capture hides the overlay again, so a user who selects inside
+/// the timeout looks exactly like one who never saw it. That mistake produced
+/// 32 false alarms before this counter replaced it.
+#[cfg(target_os = "macos")]
+static CAPTURE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+#[cfg(target_os = "macos")]
+static OVERLAY_SHOWN_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -214,9 +227,21 @@ fn open_quick_capture_window(
     let payload = CaptureReadyPayload { data_url, cursor };
 
     if let Some(existing) = app_handle.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
-        let _ = existing.emit(QUICK_EDITOR_CAPTURE_READY_EVENT, payload);
+        log::info!(target: diag::CAPTURE, "Handing the capture to the open editor window");
+        // Before the payload, not after: the editor reveals itself as soon as
+        // it has the image, and it must already be on the right display by then.
+        #[cfg(target_os = "macos")]
+        place_editor_under_pointer(&existing);
+        if let Err(e) = existing.emit(QUICK_EDITOR_CAPTURE_READY_EVENT, payload) {
+            log::error!(target: diag::CAPTURE, "The editor window did not take the capture: {e}");
+        }
         return Ok(());
     }
+
+    // No editor window yet, so this capture waits in the pending slot until the
+    // new window's webview has booted and collects it. That handover is slower
+    // and has more that can go wrong than handing it to an open window.
+    log::info!(target: diag::CAPTURE, "No editor window yet, building one (cold start)");
 
     {
         let mut pending = state
@@ -254,8 +279,19 @@ fn open_quick_capture_window(
     }
 
     let _window = builder.build().map_err(|error| {
+        log::error!(target: diag::CAPTURE, "Could not build the editor window: {error}");
         CaptureError::failed(format!("Could not open quick editor window: {error}"))
     })?;
+    // The builder works in logical units, which the toolkit converts through
+    // the scale factor of whichever display it thinks the new window is on.
+    // Restate the frame in points so it lands on the display the capture came
+    // from, whatever that conversion did.
+    #[cfg(target_os = "macos")]
+    place_editor_under_pointer(&_window);
+    log::info!(
+        target: diag::CAPTURE,
+        "Editor window built, waiting for its webview to collect the capture"
+    );
     Ok(())
 }
 
@@ -563,12 +599,14 @@ fn hide_main_window<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
 
 /// Geometry of one display, in the coordinate space `screencapture -R` uses.
 ///
-/// `bounds` is in global points with the main display's top-left at the origin,
-/// which is what CoreGraphics reports and what the screencapture region flag
-/// expects. `native` is the pixel size of the same display.
+/// Bounds are in global points with the main display's top-left at the origin,
+/// which is what Core Graphics reports and what the screencapture region flag
+/// expects. `scale` is the display's own backing factor, native pixels per
+/// point, which differs per display on a mixed-DPI desktop.
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy)]
 struct DisplayGeometry {
+    id: u32,
     x: f64,
     y: f64,
     width: f64,
@@ -576,22 +614,46 @@ struct DisplayGeometry {
     scale: f64,
 }
 
-/// Finds the display the pointer is on, asking CoreGraphics rather than the
-/// window toolkit.
-///
-/// The toolkit reports each monitor's origin scaled by that monitor's own
-/// backing factor, while the pointer comes back scaled by the main display's
-/// factor. On a mixed-DPI setup, a 2x laptop next to a 1x ultrawide, those two
-/// spaces disagree and every hit test lands on the main display. CoreGraphics
-/// reports both in global points, so they agree by construction, and it is the
-/// same space `screencapture -R` reads.
 #[cfg(target_os = "macos")]
-fn display_under_pointer() -> Option<DisplayGeometry> {
+impl DisplayGeometry {
+    /// One-line form for the log. Every capture problem so far has been a
+    /// coordinate problem, so the numbers go on the record every time.
+    fn describe(&self) -> String {
+        format!(
+            "#{} {:.0}x{:.0} at ({:.0},{:.0}) scale {:.2} ({:.0}x{:.0} px)",
+            self.id,
+            self.width,
+            self.height,
+            self.x,
+            self.y,
+            self.scale,
+            self.width * self.scale,
+            self.height * self.scale
+        )
+    }
+
+    fn contains(&self, x: f64, y: f64) -> bool {
+        x >= self.x && x < self.x + self.width && y >= self.y && y < self.y + self.height
+    }
+}
+
+/// Core Graphics display and pointer queries.
+///
+/// The window toolkit reports each monitor's origin scaled by that monitor's
+/// own backing factor, while the pointer comes back scaled by the main
+/// display's. On a mixed-DPI setup, a 2x laptop next to a 1x ultrawide, those
+/// two spaces disagree and every hit test lands on the main display. Core
+/// Graphics reports both in global points, so they agree by construction, and
+/// it is the same space `screencapture -R` reads.
+#[cfg(target_os = "macos")]
+mod cg {
+    use super::DisplayGeometry;
+
     #[repr(C)]
     #[derive(Clone, Copy)]
-    struct CGPoint {
-        x: f64,
-        y: f64,
+    pub struct CGPoint {
+        pub x: f64,
+        pub y: f64,
     }
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -622,24 +684,21 @@ fn display_under_pointer() -> Option<DisplayGeometry> {
         fn CFRelease(cf: *mut std::ffi::c_void);
     }
 
-    unsafe {
-        let event = CGEventCreate(std::ptr::null());
-        if event.is_null() {
-            return None;
+    /// Where the pointer is, in global points.
+    pub fn pointer_location() -> Option<CGPoint> {
+        unsafe {
+            let event = CGEventCreate(std::ptr::null());
+            if event.is_null() {
+                return None;
+            }
+            let point = CGEventGetLocation(event);
+            CFRelease(event);
+            Some(point)
         }
-        let pointer = CGEventGetLocation(event);
-        CFRelease(event);
+    }
 
-        let mut count: u32 = 0;
-        if CGGetActiveDisplayList(0, std::ptr::null_mut(), &mut count) != 0 || count == 0 {
-            return None;
-        }
-        let mut ids = vec![0u32; count as usize];
-        if CGGetActiveDisplayList(count, ids.as_mut_ptr(), &mut count) != 0 {
-            return None;
-        }
-
-        let describe = |id: u32| -> Option<DisplayGeometry> {
+    fn describe(id: u32) -> Option<DisplayGeometry> {
+        unsafe {
             let b = CGDisplayBounds(id);
             if b.size.width <= 0.0 || b.size.height <= 0.0 {
                 return None;
@@ -651,33 +710,115 @@ fn display_under_pointer() -> Option<DisplayGeometry> {
             let native_width = CGDisplayModeGetPixelWidth(mode) as u32;
             CGDisplayModeRelease(mode);
             Some(DisplayGeometry {
+                id,
                 x: b.origin.x,
                 y: b.origin.y,
                 width: b.size.width,
                 height: b.size.height,
                 scale: f64::from(native_width) / b.size.width,
             })
-        };
-
-        for id in ids.iter().copied() {
-            let b = CGDisplayBounds(id);
-            if pointer.x >= b.origin.x
-                && pointer.x < b.origin.x + b.size.width
-                && pointer.y >= b.origin.y
-                && pointer.y < b.origin.y + b.size.height
-            {
-                return describe(id);
-            }
         }
+    }
 
-        // Pointer between displays or unreadable: the main display is the least
-        // surprising place to put the overlay.
-        describe(CGMainDisplayID())
+    /// Every display currently attached, in the order Core Graphics lists them.
+    pub fn active_displays() -> Vec<DisplayGeometry> {
+        unsafe {
+            let mut count: u32 = 0;
+            if CGGetActiveDisplayList(0, std::ptr::null_mut(), &mut count) != 0 || count == 0 {
+                return Vec::new();
+            }
+            let mut ids = vec![0u32; count as usize];
+            if CGGetActiveDisplayList(count, ids.as_mut_ptr(), &mut count) != 0 {
+                return Vec::new();
+            }
+            ids.truncate(count as usize);
+            ids.into_iter().filter_map(describe).collect()
+        }
+    }
+
+    /// The main display, the one AppKit measures its frames from.
+    pub fn main_display() -> Option<DisplayGeometry> {
+        unsafe { describe(CGMainDisplayID()) }
+    }
+
+    /// The display the pointer is on, without logging. `display_under_pointer`
+    /// wraps this with the running commentary the capture path wants.
+    pub fn display_containing_pointer() -> Option<DisplayGeometry> {
+        let point = pointer_location()?;
+        active_displays()
+            .into_iter()
+            .find(|d| d.contains(point.x, point.y))
+            .or_else(main_display)
     }
 }
 
+/// Finds the display the pointer is on, and records how it decided.
+///
+/// Logs the pointer and every attached display on each capture. When a capture
+/// lands on the wrong screen, this is the line that says whether the pointer
+/// was read wrong or the hit test was.
+#[cfg(target_os = "macos")]
+fn display_under_pointer() -> Option<DisplayGeometry> {
+    let displays = cg::active_displays();
+    let pointer = cg::pointer_location();
+
+    if displays.is_empty() {
+        log::error!(target: diag::DISPLAY, "Core Graphics listed no active displays");
+        return None;
+    }
+
+    match pointer {
+        Some(p) => log::info!(
+            target: diag::DISPLAY,
+            "Pointer at ({:.0},{:.0}), {} display(s): {}",
+            p.x,
+            p.y,
+            displays.len(),
+            displays
+                .iter()
+                .map(DisplayGeometry::describe)
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ),
+        None => log::warn!(
+            target: diag::DISPLAY,
+            "Pointer location unavailable, {} display(s): {}",
+            displays.len(),
+            displays
+                .iter()
+                .map(DisplayGeometry::describe)
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ),
+    }
+
+    if let Some(p) = pointer {
+        if let Some(hit) = displays.iter().find(|d| d.contains(p.x, p.y)) {
+            log::info!(target: diag::DISPLAY, "Capturing display {}", hit.describe());
+            return Some(*hit);
+        }
+        // The pointer sits in the gap between two displays, or in a region no
+        // display claims. Falling back is correct, but it is also exactly the
+        // symptom of "it used the laptop even though the cursor was elsewhere",
+        // so say so rather than failing over quietly.
+        log::warn!(
+            target: diag::DISPLAY,
+            "Pointer ({:.0},{:.0}) is outside every display, falling back to the main one",
+            p.x,
+            p.y
+        );
+    }
+
+    let fallback = cg::main_display();
+    match &fallback {
+        Some(d) => log::info!(target: diag::DISPLAY, "Capturing main display {}", d.describe()),
+        None => log::error!(target: diag::DISPLAY, "Could not read the main display"),
+    }
+    fallback
+}
+
 /// Puts the overlay exactly over one display, using AppKit rather than the
-/// window toolkit.
+/// window toolkit, and checks that it landed.
 ///
 /// The toolkit converts any frame it is given through the scale factor of the
 /// monitor the window currently sits on, not the one it is moving to. With a 2x
@@ -691,29 +832,53 @@ fn display_under_pointer() -> Option<DisplayGeometry> {
 /// is put. The only adjustment needed is the flip from Core Graphics, which
 /// measures down from the top of the main display, to AppKit, which measures up
 /// from its bottom.
+///
+/// The frame is read back after the move. AppKit will quietly clamp a frame it
+/// dislikes, and a clamped frame is what a half-covered display looks like, so
+/// the readback is logged and a mismatch is an error in the log rather than a
+/// silent wrong-sized overlay.
 #[cfg(target_os = "macos")]
 fn place_overlay_on_display(window: &WebviewWindow, display: &DisplayGeometry) -> bool {
-    let Some(primary_height) = primary_display_height_points() else {
+    let Some(primary) = cg::main_display() else {
+        log::error!(
+            target: diag::OVERLAY,
+            "Cannot place the overlay: the main display height is unreadable"
+        );
         return false;
     };
     // Core Graphics measures down from the top of the main display, AppKit
     // measures up from its bottom.
-    let flipped_y = primary_height - display.y - display.height;
+    let flipped_y = primary.height - display.y - display.height;
     let frame = (display.x, flipped_y, display.width, display.height);
+
+    log::info!(
+        target: diag::OVERLAY,
+        "Placing overlay on display #{} at AppKit frame ({:.0},{:.0}) {:.0}x{:.0}",
+        display.id,
+        frame.0,
+        frame.1,
+        frame.2,
+        frame.3
+    );
 
     let window = window.clone();
     // AppKit is main-thread only. Touching NSWindow from the capture task kills
     // the process outright, which looked like the app silently doing nothing.
-    window
+    let dispatched = window
         .clone()
         .run_on_main_thread(move || {
             use objc2_app_kit::NSWindow;
             use objc2_foundation::{NSPoint, NSRect, NSSize};
 
-            let Ok(ptr) = window.ns_window() else {
-                return;
+            let ptr = match window.ns_window() {
+                Ok(ptr) => ptr,
+                Err(e) => {
+                    log::error!(target: diag::OVERLAY, "No NSWindow for the overlay: {e}");
+                    return;
+                }
             };
             if ptr.is_null() {
+                log::error!(target: diag::OVERLAY, "Overlay NSWindow pointer is null");
                 return;
             }
             unsafe {
@@ -722,45 +887,171 @@ fn place_overlay_on_display(window: &WebviewWindow, display: &DisplayGeometry) -
                     NSRect::new(NSPoint::new(frame.0, frame.1), NSSize::new(frame.2, frame.3)),
                     true,
                 );
+
+                let actual = ns_window.frame();
+                let off = (actual.origin.x - frame.0).abs().max(
+                    (actual.origin.y - frame.1)
+                        .abs()
+                        .max((actual.size.width - frame.2).abs())
+                        .max((actual.size.height - frame.3).abs()),
+                );
+                if off > 1.0 {
+                    log::error!(
+                        target: diag::OVERLAY,
+                        "Overlay frame did not stick: asked for ({:.0},{:.0}) {:.0}x{:.0}, got ({:.0},{:.0}) {:.0}x{:.0}",
+                        frame.0,
+                        frame.1,
+                        frame.2,
+                        frame.3,
+                        actual.origin.x,
+                        actual.origin.y,
+                        actual.size.width,
+                        actual.size.height
+                    );
+                } else {
+                    log::debug!(
+                        target: diag::OVERLAY,
+                        "Overlay frame confirmed at ({:.0},{:.0}) {:.0}x{:.0}",
+                        actual.origin.x,
+                        actual.origin.y,
+                        actual.size.width,
+                        actual.size.height
+                    );
+                }
+            }
+        })
+        .is_ok();
+
+    if !dispatched {
+        log::error!(
+            target: diag::OVERLAY,
+            "Could not reach the main thread to place the overlay"
+        );
+    }
+    dispatched
+}
+
+/// Moves the quick editor onto the display the pointer is on.
+///
+/// The editor used to be placed once, when its window was first built, from a
+/// frame worked out through the window toolkit. That had the same two faults as
+/// the old overlay placement: the pointer and the monitor origins are reported
+/// in different coordinate spaces, so the hit test fell through to the main
+/// display, and the frame was then converted through the scale factor of
+/// whichever monitor the window already sat on.
+///
+/// The visible result was not an error. The editor opened at full size on the
+/// built-in screen while the user was working on the external one, so from
+/// their side a capture simply produced nothing. Every capture now re-places the
+/// window, because the right display is a property of the capture, not of when
+/// the window happened to be created.
+///
+/// The frame comes from `NSScreen.visibleFrame`, which already excludes the
+/// menu bar and the Dock, rather than from arithmetic on the full bounds.
+#[cfg(target_os = "macos")]
+fn place_editor_under_pointer(window: &WebviewWindow) -> bool {
+    let Some(display) = cg::display_containing_pointer() else {
+        log::error!(target: diag::CAPTURE, "No display under the pointer to put the editor on");
+        return false;
+    };
+    let Some(primary) = cg::main_display() else {
+        log::error!(target: diag::CAPTURE, "Cannot place the editor: the main display is unreadable");
+        return false;
+    };
+
+    // Core Graphics measures down from the top of the main display, AppKit
+    // measures up from its bottom.
+    let flipped_y = primary.height - display.y - display.height;
+    let target = (display.x, flipped_y, display.width, display.height);
+    log::info!(
+        target: diag::CAPTURE,
+        "Putting the editor on display {}",
+        display.describe()
+    );
+
+    let window = window.clone();
+    window
+        .clone()
+        .run_on_main_thread(move || {
+            use objc2_app_kit::{NSScreen, NSWindow};
+            use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize};
+
+            let ptr = match window.ns_window() {
+                Ok(ptr) => ptr,
+                Err(e) => {
+                    log::error!(target: diag::CAPTURE, "No NSWindow for the editor: {e}");
+                    return;
+                }
+            };
+            if ptr.is_null() {
+                log::error!(target: diag::CAPTURE, "Editor NSWindow pointer is null");
+                return;
+            }
+
+            // run_on_main_thread already guarantees this.
+            let Some(mtm) = MainThreadMarker::new() else {
+                log::error!(target: diag::CAPTURE, "Editor placement is not on the main thread");
+                return;
+            };
+
+            // Match the target display to its NSScreen by frame, then take the
+            // area that excludes the menu bar and the Dock.
+            let mut frame = NSRect::new(
+                NSPoint::new(target.0, target.1),
+                NSSize::new(target.2, target.3),
+            );
+            let mut matched = false;
+            for screen in NSScreen::screens(mtm).iter() {
+                let f = screen.frame();
+                if (f.origin.x - target.0).abs() <= 1.0 && (f.origin.y - target.1).abs() <= 1.0 {
+                    frame = screen.visibleFrame();
+                    matched = true;
+                    break;
+                }
+            }
+            if !matched {
+                log::warn!(
+                    target: diag::CAPTURE,
+                    "No NSScreen matches the target display, using its full bounds"
+                );
+            }
+
+            unsafe {
+                let ns_window = &*(ptr as *const NSWindow);
+                ns_window.setFrame_display(frame, true);
+
+                let actual = ns_window.frame();
+                let off = (actual.origin.x - frame.origin.x)
+                    .abs()
+                    .max((actual.origin.y - frame.origin.y).abs())
+                    .max((actual.size.width - frame.size.width).abs())
+                    .max((actual.size.height - frame.size.height).abs());
+                if off > 1.0 {
+                    log::error!(
+                        target: diag::CAPTURE,
+                        "Editor frame did not stick: asked for ({:.0},{:.0}) {:.0}x{:.0}, got ({:.0},{:.0}) {:.0}x{:.0}",
+                        frame.origin.x,
+                        frame.origin.y,
+                        frame.size.width,
+                        frame.size.height,
+                        actual.origin.x,
+                        actual.origin.y,
+                        actual.size.width,
+                        actual.size.height
+                    );
+                } else {
+                    log::info!(
+                        target: diag::CAPTURE,
+                        "Editor placed at ({:.0},{:.0}) {:.0}x{:.0}",
+                        actual.origin.x,
+                        actual.origin.y,
+                        actual.size.width,
+                        actual.size.height
+                    );
+                }
             }
         })
         .is_ok()
-}
-
-/// Height of the main display in points, the reference AppKit measures from.
-#[cfg(target_os = "macos")]
-fn primary_display_height_points() -> Option<f64> {
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CGPoint {
-        x: f64,
-        y: f64,
-    }
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CGSize {
-        width: f64,
-        height: f64,
-    }
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CGRect {
-        origin: CGPoint,
-        size: CGSize,
-    }
-    #[link(name = "CoreGraphics", kind = "framework")]
-    extern "C" {
-        fn CGMainDisplayID() -> u32;
-        fn CGDisplayBounds(display: u32) -> CGRect;
-    }
-    unsafe {
-        let b = CGDisplayBounds(CGMainDisplayID());
-        if b.size.height > 0.0 {
-            Some(b.size.height)
-        } else {
-            None
-        }
-    }
 }
 
 /// Grabs a still of the given display region (logical points) into a data URL.
@@ -780,15 +1071,24 @@ fn capture_display_still(x: f64, y: f64, w: f64, h: f64) -> Result<(String, u32,
         h.round() as i64
     );
 
+    let started = std::time::Instant::now();
     let output = Command::new("/usr/sbin/screencapture")
         .args(["-x", "-r", "-R", &region])
         .arg(&file_path)
         .output()
-        .map_err(|e| CaptureError::failed(format!("Failed to launch screencapture: {e}")))?;
+        .map_err(|e| {
+            log::error!(target: diag::CAPTURE, "Could not launch screencapture: {e}");
+            CaptureError::failed(format!("Failed to launch screencapture: {e}"))
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let _ = fs::remove_file(&file_path);
+        log::error!(
+            target: diag::CAPTURE,
+            "screencapture -R {region} exited with {:?}: {stderr}",
+            output.status.code()
+        );
         if is_screen_capture_permission_error(&stderr) {
             return Err(CaptureError::failed(screen_recording_permission_message()));
         }
@@ -797,16 +1097,35 @@ fn capture_display_still(x: f64, y: f64, w: f64, h: f64) -> Result<(String, u32,
         )));
     }
 
-    let bytes = fs::read(&file_path)
-        .map_err(|e| CaptureError::failed(format!("Failed to read frozen capture: {e}")))?;
+    let bytes = fs::read(&file_path).map_err(|e| {
+        log::error!(target: diag::CAPTURE, "Could not read the still at {}: {e}", file_path.display());
+        CaptureError::failed(format!("Failed to read frozen capture: {e}"))
+    })?;
     let _ = fs::remove_file(&file_path);
     if bytes.is_empty() {
+        // screencapture reports success and writes nothing when Screen
+        // Recording was revoked after launch. Worth its own line, because the
+        // user sees the same "nothing happened" as for a real crash.
+        log::error!(
+            target: diag::CAPTURE,
+            "screencapture wrote an empty file, which means Screen Recording is not granted"
+        );
         return Err(CaptureError::failed(screen_recording_permission_message()));
     }
 
     let (width, height) = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
-        .map_err(|e| CaptureError::failed(format!("Failed to decode frozen capture: {e}")))?
+        .map_err(|e| {
+            log::error!(target: diag::CAPTURE, "Could not decode the still: {e}");
+            CaptureError::failed(format!("Failed to decode frozen capture: {e}"))
+        })?
         .dimensions();
+
+    log::info!(
+        target: diag::CAPTURE,
+        "Still of region {region} is {width}x{height} px, {} KB, took {} ms",
+        bytes.len() / 1024,
+        started.elapsed().as_millis()
+    );
 
     Ok((
         format!("data:image/png;base64,{}", STANDARD.encode(bytes)),
@@ -820,7 +1139,12 @@ fn capture_display_still(x: f64, y: f64, w: f64, h: f64) -> Result<(String, u32,
 #[cfg(target_os = "macos")]
 fn start_frozen_capture(app_handle: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
+        let started = std::time::Instant::now();
+        let seq = CAPTURE_SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        log::info!(target: diag::CAPTURE, "Capture #{seq} requested");
+
         if !screen_recording_access_granted_impl() {
+            log::error!(target: diag::CAPTURE, "Screen Recording is not granted, capture stopped");
             show_main_window(&app_handle);
             let _ = app_handle.emit(
                 CAPTURE_ERROR_EVENT,
@@ -847,11 +1171,13 @@ fn start_frozen_capture(app_handle: tauri::AppHandle) {
             }
         }
         if hid_a_window {
+            log::debug!(target: diag::CAPTURE, "Hid a visible window before freezing");
             // Give the compositor a moment to drop the just-hidden window.
             std::thread::sleep(Duration::from_millis(60));
         }
 
         let Some(display) = display_under_pointer() else {
+            log::error!(target: diag::CAPTURE, "No display to capture, capture stopped");
             let _ = app_handle.emit(
                 CAPTURE_ERROR_EVENT,
                 CaptureError::failed("Could not find the display under the pointer"),
@@ -864,10 +1190,28 @@ fn start_frozen_capture(app_handle: tauri::AppHandle) {
         let (image_data_url, width, height) = match still {
             Ok(v) => v,
             Err(e) => {
+                log::error!(target: diag::CAPTURE, "Freezing the screen failed: {}", e.message);
                 let _ = app_handle.emit(CAPTURE_ERROR_EVENT, e);
                 return;
             }
         };
+
+        // The still should be the display's point size times its backing
+        // factor. When it is not, the region and the display disagree, which is
+        // what a half-covered or wrong-screen capture looks like further down.
+        let expected = (
+            (display.width * scale).round() as u32,
+            (display.height * scale).round() as u32,
+        );
+        if (width, height) != expected {
+            log::error!(
+                target: diag::CAPTURE,
+                "Still is {width}x{height} px but display #{} at scale {scale:.2} should give {}x{}",
+                display.id,
+                expected.0,
+                expected.1
+            );
+        }
 
         let payload = FrozenCapturePayload {
             image_data_url,
@@ -888,17 +1232,47 @@ fn start_frozen_capture(app_handle: tauri::AppHandle) {
         // stays hidden until its webview has painted the still and shows itself
         // via frozen_ready_to_show, so the user never sees a blank flash.
         if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
+            log::debug!(target: diag::OVERLAY, "Reusing the pre-warmed overlay");
             place_overlay_on_display(&overlay, &display);
-            let _ = overlay.emit(FROZEN_PAYLOAD_EVENT, payload.clone());
+            if let Err(e) = overlay.emit(FROZEN_PAYLOAD_EVENT, payload.clone()) {
+                // The overlay window exists but its webview is not listening.
+                // It then sits there hidden and the capture never appears,
+                // which is the silent failure this log is here to catch.
+                log::error!(target: diag::OVERLAY, "Could not hand the still to the overlay: {e}");
+            }
         } else if let Err(e) = {
+            log::info!(target: diag::OVERLAY, "No pre-warmed overlay, building one now");
             build_frozen_overlay(&app_handle, &display)
         } {
+            log::error!(target: diag::OVERLAY, "Could not build the overlay: {e}");
             show_main_window(&app_handle);
             let _ = app_handle.emit(
                 CAPTURE_ERROR_EVENT,
                 CaptureError::failed(format!("Could not open the capture overlay: {e}")),
             );
+            return;
         }
+
+        log::info!(
+            target: diag::CAPTURE,
+            "Still handed to the overlay {} ms after the shortcut",
+            started.elapsed().as_millis()
+        );
+
+        // The overlay reveals itself once its webview has painted the still. If
+        // that handshake never completes, the window stays hidden and the user
+        // sees nothing at all: no overlay, no editor, no error. Check back and
+        // name the step that stalled, so "nothing happened" stops being the
+        // whole bug report.
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(1500)).await;
+            if OVERLAY_SHOWN_SEQ.load(std::sync::atomic::Ordering::SeqCst) < seq {
+                log::error!(
+                    target: diag::OVERLAY,
+                    "Capture #{seq}: the overlay never appeared. Its webview did not call frozen_ready_to_show within 1.5 s, so it either failed to load or threw while decoding the still."
+                );
+            }
+        });
     });
 }
 
@@ -951,8 +1325,15 @@ fn prewarm_frozen_overlay(app_handle: &tauri::AppHandle) {
     {
         return;
     }
-    if let Some(display) = display_under_pointer() {
-        let _ = build_frozen_overlay(app_handle, &display);
+    match display_under_pointer() {
+        Some(display) => {
+            if let Err(e) = build_frozen_overlay(app_handle, &display) {
+                log::error!(target: diag::OVERLAY, "Could not pre-warm the overlay: {e}");
+            } else {
+                log::info!(target: diag::OVERLAY, "Overlay pre-warmed");
+            }
+        }
+        None => log::warn!(target: diag::OVERLAY, "No display to pre-warm the overlay on"),
     }
 }
 
@@ -960,11 +1341,19 @@ fn prewarm_frozen_overlay(app_handle: &tauri::AppHandle) {
 /// window. Called from FrozenCapture once the image has decoded.
 #[tauri::command]
 fn frozen_ready_to_show(app_handle: tauri::AppHandle) {
-    if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
-        let _ = overlay.show();
-        let _ = overlay.set_focus();
-        let _ = overlay.set_always_on_top(true);
+    let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) else {
+        log::error!(target: diag::OVERLAY, "Overlay asked to be shown but the window is gone");
+        return;
+    };
+    if let Err(e) = overlay.show() {
+        log::error!(target: diag::OVERLAY, "Could not show the overlay: {e}");
+        return;
     }
+    let _ = overlay.set_focus();
+    let _ = overlay.set_always_on_top(true);
+    let seq = CAPTURE_SEQ.load(std::sync::atomic::Ordering::SeqCst);
+    OVERLAY_SHOWN_SEQ.store(seq, std::sync::atomic::Ordering::SeqCst);
+    log::info!(target: diag::OVERLAY, "Capture #{seq}: overlay shown");
 }
 
 #[tauri::command]
@@ -991,6 +1380,7 @@ fn begin_capture(app_handle: tauri::AppHandle) {
 
 #[tauri::command]
 fn cancel_frozen_capture(app_handle: tauri::AppHandle) {
+    log::info!(target: diag::CAPTURE, "Capture cancelled");
     if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
         let _ = overlay.hide();
     }
@@ -1006,7 +1396,13 @@ fn finish_frozen_capture(
     if let Some(overlay) = app_handle.get_webview_window(CAPTURE_OVERLAY_WINDOW_LABEL) {
         let _ = overlay.hide();
     }
-    open_quick_capture_window(app_handle, state, data_url, cursor)
+    match decode_png_dimensions(&data_url) {
+        Ok((w, h)) => log::info!(target: diag::CAPTURE, "Selection cropped to {w}x{h} px, opening the editor"),
+        Err(e) => log::error!(target: diag::CAPTURE, "Selection is not a readable PNG: {}", e.message),
+    }
+    open_quick_capture_window(app_handle, state, data_url, cursor).inspect_err(|e| {
+        log::error!(target: diag::CAPTURE, "Could not open the editor: {}", e.message);
+    })
 }
 
 fn start_background_capture(app_handle: tauri::AppHandle) {
@@ -1200,12 +1596,18 @@ pub fn run() {
         .manage(PendingFrozenCaptureState::default())
         .manage(memory::MemoryState::new())
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
+            // First thing in setup, so anything that fails after this point
+            // leaves a trace. Capture runs with no window on screen, so the log
+            // file is the only place a failure can be reported.
+            app.handle().plugin(diag::plugin())?;
+            log::info!(
+                target: diag::CAPTURE,
+                "VanillaShot {} starting, log level {}",
+                app.package_info().version,
+                log::max_level()
+            );
+            if let Some(path) = diag::log_file_path(app.handle()) {
+                log::info!(target: diag::CAPTURE, "Logging to {}", path.display());
             }
 
             #[cfg(desktop)]
@@ -1344,6 +1746,9 @@ pub fn run() {
             finish_frozen_capture,
             cancel_frozen_capture,
             begin_capture,
+            diag::diagnostics_info,
+            diag::diagnostics_read_log,
+            diag::log_from_webview,
             memory::commands::memory_start,
             memory::commands::memory_stop,
             memory::commands::memory_status,

@@ -4,12 +4,32 @@ All notable changes to VanillaShot are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.2] - 2026-09-11
+## [0.2.2] - 2026-09-17
 
 Multi-monitor fixes. Capture was unreliable as soon as a second display with a
 different scale factor was attached.
 
+### Added
+
+- A log file, written in release builds as well as debug. Capture runs with no
+  window on screen, so a failure had nowhere to report itself and every problem
+  arrived as "nothing happened". Each capture now records the pointer, every
+  attached display, the one it picked, the size of the still, where the overlay
+  and the editor were put, and anything that failed. The webview writes to the
+  same file, so a thrown exception in the overlay is on the record too. Settings
+  shows the path and copies the recent lines. It stays on your machine.
+
 ### Fixed
+
+- The editor opened on the built-in display while the capture was taken on an
+  external one, so the screenshot looked like it had vanished. The editor was
+  placed once, when its window was first built, using the same two coordinate
+  faults the overlay had: the pointer and the monitor origins were compared
+  across different scales, and the frame was converted through the scale factor
+  of the display the window was already on. The editor is now placed on every
+  capture, because the right display belongs to the capture rather than to
+  whenever the window happened to be created. Core Graphics picks the display
+  and AppKit sets the frame from NSScreen's visible area.
 
 - Capture ignored the display the pointer was on and used the built-in screen
   instead. The pointer and the monitor list were read from the window toolkit,
