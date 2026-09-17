@@ -1,6 +1,6 @@
 {
   "name": "vanilla-shot",
-  "author": "martinezooo · hack-jitsu.com",
+  "author": "martinezooo \u00b7 hack-jitsu.com",
   "private": true,
   "version": "0.2.3",
   "type": "module",
@@ -18,7 +18,8 @@
     "vendor:tesseract": "node scripts/vendor-tesseract.mjs",
     "predev": "node scripts/vendor-tesseract.mjs",
     "prebuild": "node scripts/vendor-tesseract.mjs",
-    "install:local": "bash scripts/install-local.sh"
+    "install:local": "bash scripts/install-local.sh",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

@@ -48,7 +48,10 @@ fi
 
 echo "Building..."
 cd "$ROOT"
-npm run tauri build -- --bundles app
+# Local installs do not produce an update archive, so they need no signing key.
+# Leaving it on would make every contributor's build fail for want of a private
+# key that only releases use.
+npm run tauri build -- --bundles app --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
 echo "Stopping any running instance..."
 osascript -e "tell application \"${APP_NAME}\" to quit" 2>/dev/null || true
