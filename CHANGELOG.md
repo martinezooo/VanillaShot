@@ -4,6 +4,31 @@ All notable changes to VanillaShot are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-09-17
+
+### Added
+
+- One-click update. Settings checks GitHub for a newer release, downloads it and
+  restarts into it. The old button only opened a browser, and the version it
+  opened was wrong anyway, because the page it was asked for was dropped before
+  the URL was built. Updating from a DMG still works and is unchanged.
+
+  The update archive is signed. The app carries the public half of the key and
+  refuses a download that does not verify against it, so a substituted or
+  altered build cannot install.
+
+  This is the first network request VanillaShot has ever made, and it happens
+  only when the button is pressed. There is no check on a timer, none at launch
+  and nothing reported about you. README and the security notes say so plainly
+  rather than keeping the older claim that the app never reaches the network.
+
+### Note
+
+- macOS asks for Screen Recording again after an update. The build is signed
+  ad-hoc, so the system identifies the app by the hash of its contents, and a
+  new version is a new app as far as that grant is concerned. Installing from a
+  DMG has always had the same effect.
+
 ## [0.2.2] - 2026-09-17
 
 Multi-monitor fixes. Capture was unreliable as soon as a second display with a

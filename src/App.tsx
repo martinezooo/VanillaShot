@@ -41,6 +41,13 @@ import {
 } from './lib/capture'
 import { scanCodesFromImage, type CodeRect, type DetectedCode } from './lib/codes'
 import {
+  checkForUpdate,
+  formatBytes,
+  installUpdate,
+  relaunchApp,
+  type UpdateState,
+} from './lib/update'
+import {
   describeError,
   getDiagnosticsInfo,
   logError,
@@ -979,6 +986,7 @@ function App() {
   // so re-running the bootstrap finds an empty slot and that is not a fault.
   const quickBootstrapRanRef = useRef(false)
   const [diagnosticsNotice, setDiagnosticsNotice] = useState<string | null>(null)
+  const [updateState, setUpdateState] = useState<UpdateState>({ kind: 'idle' })
   const [memoryNotice, setMemoryNotice] = useState<{ tone: 'ok' | 'error'; detail: string } | null>(null)
   const [memoryCountdownValue, setMemoryCountdownValue] = useState<number | null>(null)
   const [memoryRecordingElapsedSecs, setMemoryRecordingElapsedSecs] = useState(0)
@@ -1297,6 +1305,19 @@ function App() {
     } catch (error) {
       setDiagnosticsNotice(describeError(error))
     }
+  }, [])
+
+  const handleCheckForUpdate = useCallback(async () => {
+    setUpdateState({ kind: 'checking' })
+    setUpdateState(await checkForUpdate())
+  }, [])
+
+  const handleInstallUpdate = useCallback(async (version: string) => {
+    setUpdateState({ kind: 'downloading', version, received: 0, total: null })
+    const result = await installUpdate((received, total) => {
+      setUpdateState({ kind: 'downloading', version, received, total })
+    })
+    setUpdateState(result)
   }, [])
 
   const handleOpenRecordingSettings = useCallback(async () => {
@@ -4442,15 +4463,73 @@ function App() {
             <div className="settings-row">
               <span className="settings-row-label">Updates</span>
               <span className="settings-row-trailing">
-                <span className="settings-row-value">{APP_VERSION_LABEL} installed</span>
-                <button
-                  className="settings-button"
-                  onClick={() => void handleOpenProjectPage('releases')}
-                  type="button"
-                >
-                  Check on GitHub
-                </button>
+                {updateState.kind === 'checking' && <span className="settings-row-value">Checking...</span>}
+                {updateState.kind === 'current' && (
+                  <span className="settings-row-value">{APP_VERSION_LABEL} is the newest</span>
+                )}
+                {updateState.kind === 'downloading' && (
+                  <span className="settings-row-value">
+                    {updateState.total
+                      ? `${formatBytes(updateState.received)} of ${formatBytes(updateState.total)}`
+                      : formatBytes(updateState.received)}
+                  </span>
+                )}
+                {updateState.kind === 'idle' && (
+                  <span className="settings-row-value">{APP_VERSION_LABEL} installed</span>
+                )}
+                {updateState.kind === 'error' && <span className="settings-row-value">Update failed</span>}
+                {updateState.kind === 'available' && (
+                  <span className="settings-row-value">{updateState.version} available</span>
+                )}
+                {updateState.kind === 'ready' && (
+                  <span className="settings-row-value">{updateState.version} installed</span>
+                )}
+
+                {(updateState.kind === 'idle' ||
+                  updateState.kind === 'current' ||
+                  updateState.kind === 'error') && (
+                  <button className="settings-button" onClick={() => void handleCheckForUpdate()} type="button">
+                    Check for Updates
+                  </button>
+                )}
+                {updateState.kind === 'available' && (
+                  <button
+                    className="settings-button"
+                    onClick={() => void handleInstallUpdate(updateState.version)}
+                    type="button"
+                  >
+                    Update Now
+                  </button>
+                )}
+                {updateState.kind === 'ready' && (
+                  <button className="settings-button" onClick={() => void relaunchApp()} type="button">
+                    Restart
+                  </button>
+                )}
               </span>
+            </div>
+            {updateState.kind === 'error' && (
+              <div className="settings-row">
+                <span className="settings-row-value">{updateState.message}</span>
+              </div>
+            )}
+            {updateState.kind === 'ready' && (
+              <div className="settings-row">
+                <span className="settings-row-value">
+                  Restart to finish. macOS will ask for Screen Recording again, because an
+                  update changes the app it identifies by.
+                </span>
+              </div>
+            )}
+            <div className="settings-row">
+              <span className="settings-row-label">Release notes</span>
+              <button
+                className="settings-button"
+                onClick={() => void handleOpenProjectPage('releases')}
+                type="button"
+              >
+                Open on GitHub
+              </button>
             </div>
             <div className="settings-row">
               <span className="settings-row-label">Source</span>
@@ -4460,8 +4539,9 @@ function App() {
             </div>
           </section>
           <p className="settings-footnote">
-            Source and releases are on GitHub, and open in your browser. VanillaShot has no
-            in-app updater: it never calls out on its own.
+            Checking for an update is the only thing here that reaches the network, and it
+            happens only when you press the button. There is no check on a timer and none at
+            launch. The download is signed, and a version that does not verify is refused.
           </p>
           <p className="settings-footnote">Capture, OCR and screen memory all run locally. Nothing is uploaded.</p>
         </main>

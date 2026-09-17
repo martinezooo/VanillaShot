@@ -289,10 +289,17 @@ Memory, and Search Screen Memory. See [raycast/README.md](raycast/README.md).
 
 ## Privacy
 
-VanillaShot makes no network requests. No telemetry, no analytics, no crash
-reporting, no updater, and no HTTP client in the binary. Capture, OCR, barcode
-decoding and redaction all run on your machine, and the OCR model, the barcode
-decoder and the UI font are bundled rather than fetched.
+VanillaShot makes one kind of network request, and only when you ask for it.
+Pressing **Check for Updates** asks GitHub whether a newer release exists, and
+pressing **Update Now** downloads it. Nothing else reaches the network. There is
+no telemetry, no analytics, no crash reporting, no check on a timer and no check
+at launch. Capture, OCR, barcode decoding and redaction all run on your machine,
+and the OCR model, the barcode decoder and the UI font are bundled rather than
+fetched.
+
+The update request sends nothing about you. It asks for a file and reads back a
+version number and a download link. GitHub sees the request the same way it sees
+anyone fetching a public file.
 
 The thing to watch is not the network but the local disk. Screen memory is
 stored unencrypted, and any local process can open a `vanillashot://` link,

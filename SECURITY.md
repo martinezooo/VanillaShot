@@ -19,9 +19,17 @@ updater, so fixes reach you by rebuilding from source.
 
 ## Threat model
 
-VanillaShot is a local, offline tool. It makes no network requests, has no
-server, no account and no telemetry, so the usual remote attack surface does not
-apply. What is worth scrutiny:
+VanillaShot is a local tool with one network path: the update check, which runs
+only when the user presses the button. There is no server, no account and no
+telemetry. What is worth scrutiny:
+
+**The updater.** It fetches a manifest from GitHub over HTTPS and downloads the
+archive the manifest names. The archive must carry a valid signature from the
+key whose public half is compiled into the app, so a substituted or altered
+download is refused rather than installed. Anything that gets an unsigned or
+wrongly signed build installed, that reaches a URL the manifest did not name, or
+that turns the manifest into code, is in scope. So is anything the request
+discloses beyond the fact that someone asked for a public file.
 
 **The screen-memory store.** Recordings, keyframes and the OCR index live
 unencrypted under `~/Library/Application Support/com.hackjitsu.vanillashot/`.

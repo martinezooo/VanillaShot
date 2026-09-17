@@ -188,13 +188,22 @@ fn capture_output_dir() -> String {
 /// forwards an arbitrary string to `open` would hand anything running in the
 /// page a way to launch external handlers.
 #[tauri::command]
-fn open_project_page() -> Result<(), CaptureError> {
+fn open_project_page(section: Option<String>) -> Result<(), CaptureError> {
     const PROJECT_URL: &str = "https://github.com/martinezooo/VanillaShot";
+    const RELEASES_URL: &str = "https://github.com/martinezooo/VanillaShot/releases/latest";
+
+    // Pick from a fixed set rather than building a URL from the argument. The
+    // caller is our own page, but a URL assembled from anything the webview
+    // sends is a hole waiting to be found, and there are only two pages here.
+    let url = match section.as_deref() {
+        Some("releases") => RELEASES_URL,
+        _ => PROJECT_URL,
+    };
 
     #[cfg(target_os = "macos")]
     {
         Command::new("/usr/bin/open")
-            .arg(PROJECT_URL)
+            .arg(url)
             .status()
             .map_err(|error| CaptureError::failed(format!("Could not open the project page: {error}")))?;
 
@@ -1613,6 +1622,12 @@ pub fn run() {
             #[cfg(desktop)]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
+
+                // One-click update. It reaches the network only when the user
+                // presses the button, never on a timer and never at launch.
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+                // Needed to relaunch into the new version once it is installed.
+                app.handle().plugin(tauri_plugin_process::init())?;
 
                 app.handle().plugin(tauri_plugin_deep_link::init())?;
 
