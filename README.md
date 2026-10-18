@@ -316,6 +316,8 @@ npm run install:local # build, sign, install to /Applications
 npm run lint
 ```
 
+Release maintainers should follow [docs/releasing.md](docs/releasing.md).
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions.
 
 ## License

@@ -4,6 +4,19 @@ All notable changes to VanillaShot are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-10-18
+
+### Added
+
+- Added a dropdown for selecting annotation stroke width.
+- Added the recorded frame count and disk usage to the memory stop summary.
+
+### Changed
+
+- Renamed the quick-bar memory action to **Record**.
+- Removed the redundant "Screenshot ready" status from the quick bar.
+- Added an automated signed GitHub Release workflow for macOS updater builds.
+
 ## [0.2.3] - 2026-09-17
 
 ### Added

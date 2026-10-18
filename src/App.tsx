@@ -178,6 +178,7 @@ type MemoryStopSummary = {
   dataDir: string
   frameCount: number
   segmentCount: number
+  diskUsageBytes: number
   elapsedLabel: string
 }
 
@@ -1379,6 +1380,7 @@ function App() {
           dataDir: freshStatus.dataDir,
           frameCount: freshStatus.stats?.frameCount ?? 0,
           segmentCount: freshStatus.stats?.segmentCount ?? 0,
+          diskUsageBytes: freshStatus.stats?.diskUsageBytes ?? 0,
           elapsedLabel,
         }
         setMemoryStopSummary(summary)
@@ -4211,17 +4213,6 @@ function App() {
     (hasActiveReportStatus ? reportStatus : '')
   const quickToastTone =
     errorMessage || memoryNotice?.tone === 'error' || reportStatus.startsWith('Note failed:') ? 'error' : 'ok'
-  const quickShareStatus = reportSubmitting
-    ? 'Attaching note...'
-    : reportOpen
-      ? 'Note draft ready'
-      : hasAttachedNote
-        ? 'Note attached'
-      : cropRect
-        ? 'Crop ready to save'
-        : annotations.length > 0
-          ? `${annotations.length} ${annotations.length === 1 ? 'edit' : 'edits'} ready`
-          : 'Screenshot ready'
   const textToolPlacementHint = textPromptPosition
     ? `Ready at ${Math.round(textPromptPosition.x)}, ${Math.round(textPromptPosition.y)}`
     : 'Type text here, then click the screenshot.'
@@ -4261,7 +4252,7 @@ function App() {
     ? 'Stop'
     : memoryCountdownValue !== null
       ? `Starting ${memoryCountdownValue}…`
-      : 'Memory'
+      : 'Record'
   const quickMemoryBannerText = memoryStatus?.recording
     ? `Recording memory for ${formatElapsedTimer(memoryRecordingElapsedSecs)}. Stop here or from the menu bar > Stop Memory.`
     : 'Start continuous local memory capture from this bar or from the menu bar.'
@@ -4284,7 +4275,7 @@ function App() {
     : memoryStatus?.recording
     ? 'Recording locally in the background. Stop here or from the menu bar.'
     : memoryStopSummary
-      ? `${memoryStopSummary.frameCount} frames · ${memoryStopSummary.segmentCount} segments saved locally.`
+      ? `${memoryStopSummary.frameCount} frames · ${formatBlobSize(memoryStopSummary.diskUsageBytes)} used locally.`
       : 'Screen memory is idle.'
   const cornerMemoryHudActionLabel = memoryStatus?.recording ? 'Stop' : 'Resume'
   return (
@@ -4862,17 +4853,21 @@ function App() {
 
               {showQuickStrokeControls && (
                 <div className="quick-choice-row" title="Stroke width">
-                  {STROKE_WIDTH_OPTIONS.map((widthValue) => (
-                    <button
-                      key={`quick-stroke-width-${widthValue}`}
-                      className={`quick-pill ${strokeWidth === widthValue ? 'active' : ''}`}
-                      onClick={() => setStrokeWidth(widthValue)}
-                      type="button"
-                      title={`Stroke ${widthValue}px`}
+                  <label className="quick-select-label">
+                    <span>Size</span>
+                    <select
+                      className="quick-select"
+                      value={strokeWidth}
+                      onChange={(event) => setStrokeWidth(Number(event.target.value))}
+                      aria-label="Stroke width"
                     >
-                      {widthValue}px
-                    </button>
-                  ))}
+                      {STROKE_WIDTH_OPTIONS.map((widthValue) => (
+                        <option key={`quick-stroke-width-${widthValue}`} value={widthValue}>
+                          {widthValue}px
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
               )}
 
@@ -5019,7 +5014,6 @@ function App() {
               </div>
             </div>
             <div className="quick-bar-group quick-bar-group-share">
-              <span className="quick-toolbar-meta">{quickShareStatus}</span>
               {sensitiveOcrWords.length > 0 && (
                 <button
                   className="quick-action quick-mask"
@@ -5145,7 +5139,10 @@ function App() {
           </div>
           <div className="memory-stop-hud-body">
             <strong>Recording stopped ({memoryStopSummary.elapsedLabel})</strong>
-            <p>{memoryStopSummary.frameCount} frames &middot; {memoryStopSummary.segmentCount} segments</p>
+            <p>
+              {memoryStopSummary.frameCount} frames &middot; {formatBlobSize(memoryStopSummary.diskUsageBytes)} used
+              <span className="memory-stop-hud-segments"> &middot; {memoryStopSummary.segmentCount} segments</span>
+            </p>
             <button
               className="memory-stop-hud-path"
               onClick={() => void handleOpenMemoryStopFolder()}

@@ -800,6 +800,41 @@
   color: #fdf5e3;
 }
 
+.quick-select-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  color: #c8c0b5;
+  font-size: 0.69rem;
+  font-weight: 600;
+}
+
+.quick-select {
+  appearance: none;
+  min-width: 72px;
+  height: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03)),
+    rgba(27, 25, 22, 0.38);
+  color: #faf7f3;
+  padding: 0 0.7rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.quick-select:focus {
+  outline: none;
+  border-color: rgba(215, 193, 163, 0.42);
+  box-shadow: 0 0 0 3px rgba(198, 165, 121, 0.12);
+}
+
+.quick-select option {
+  background: #211e1a;
+  color: #faf7f3;
+}
+
 .quick-zoom-value {
   appearance: none;
   border-radius: 10px;
