@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build and publish (for example v0.2.4)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-14
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.VANILLASHOT_UPDATER_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.VANILLASHOT_UPDATER_PRIVATE_KEY_PASSWORD }}
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Validate release tag and app versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::error::Missing VANILLASHOT_UPDATER_PRIVATE_KEY repository secret"
+            exit 1
+          fi
+
+          case "$RELEASE_TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::Release tag must look like v1.2.3"; exit 1 ;;
+          esac
+
+          tag_version="${RELEASE_TAG#v}"
+          package_version="$(node -p "require('./package.json').version")"
+          tauri_version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          cargo_version="$(awk -F '"' '$1 ~ /^version[[:space:]]*=/ {print $2; exit}' src-tauri/Cargo.toml)"
+
+          for version in "$package_version" "$tauri_version" "$cargo_version"; do
+            if [ "$version" != "$tag_version" ]; then
+              echo "::error::Release tag $RELEASE_TAG does not match all app versions (package=$package_version tauri=$tauri_version cargo=$cargo_version)"
+              exit 1
+            fi
+          done
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify before release
+        run: |
+          npm run lint
+          npm test
+          npm run build
+          cargo check --manifest-path src-tauri/Cargo.toml --locked
+
+      - name: Build and publish signed release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: VanillaShot ${{ env.RELEASE_TAG }}
+          releaseBody: |
+            See the [changelog](https://github.com/${{ github.repository }}/blob/${{ env.RELEASE_TAG }}/CHANGELOG.md).
+
+            This release includes a signed updater bundle for Apple silicon.
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          args: '--target aarch64-apple-darwin'

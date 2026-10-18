@@ -1,6 +1,6 @@
 [package]
 name = "vanilla-shot"
-version = "0.2.3"
+version = "0.2.4"
 description = "Fast, simple screenshot tool for macOS with a rich on-the-spot editor, voice notes, OCR and searchable screen history. Native core in Rust."
 authors = ["martinezooo · hack-jitsu.com"]
 license = "MIT"
